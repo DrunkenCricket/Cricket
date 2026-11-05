@@ -1,0 +1,18 @@
+name: Rams Pick'em
+
+on:
+  schedule:
+    - cron: "0 18 * * 2"   # Tuesday 10:00 AM PST (11:00 AM during PDT)
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python pickem.py
+        env:
+          DISCORD_PICKEM_WEBHOOK: ${{ secrets.DISCORD_PICKEM }}

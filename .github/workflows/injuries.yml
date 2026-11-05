@@ -1,0 +1,18 @@
+name: Rams Injury Report
+
+on:
+  schedule:
+    - cron: "30 22 * * 3-5"   # Wed-Fri 2:30 PM PST, after the NFL's daily injury reports
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python injuries.py
+        env:
+          DISCORD_INJURY_WEBHOOK: ${{ secrets.INJURY_REPORT }}
