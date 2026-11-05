@@ -76,6 +76,9 @@ def depth_chart(season):
 
 UNIT_COLORS = [RAMS_BLUE, 0xFFA300, 0x8A8D8F]  # offense, defense, special teams
 BLANK = {"name": "\u200b", "value": "\u200b", "inline": True}
+# Invisible 1200x1 image: Discord stretches any embed with an image to full width,
+# so every card lines up at the same size.
+SPACER = {"url": "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/assets/spacer.png"}
 
 
 def build(game, now):
@@ -104,7 +107,7 @@ def build(game, now):
                 fields.append({"name": label, "value": "\n".join(shown[:cap])[:1024], "inline": True})
         while len(fields) % 3:
             fields.append(BLANK)  # keep the 3-column grid aligned
-        units.append({"title": title, "color": color, "fields": fields or [BLANK]})
+        units.append({"title": title, "color": color, "fields": fields or [BLANK], "image": SPACER})
 
     out = sorted((a for a in roster.values() if status(a) in RULED_OUT - {"Injured Reserve"}),
                  key=lambda a: a.get("fullName", ""))
@@ -117,7 +120,8 @@ def build(game, now):
             f"{names.full(a.get('fullName', '?'))} ({(a.get('position') or {}).get('abbreviation', '')})"
             for a in out)
 
-    header = {"title": "\U0001F40F  Rams Game Day Lineup", "description": desc, "color": RAMS_BLUE}
+    header = {"title": "\U0001F40F  Rams Game Day Lineup", "description": desc, "color": RAMS_BLUE,
+              "image": SPACER}
     units[-1]["footer"] = {"text": "Bold = starter  \u2022  Q = questionable  \u2022  Projected from the ESPN "
                                    "depth chart minus players ruled out. Official inactives drop 90 min before kickoff."}
     return {"username": "Rams Game Day", "embeds": [header] + units}
