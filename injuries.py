@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Post the Rams injury report to Discord, grouped by status.
+"""Post the Rams injury report, plus this week's opponent, to Discord.
 
   DISCORD_INJURY_WEBHOOK=https://discord.com/api/webhooks/... python injuries.py
   python injuries.py    # no webhook = dry run
@@ -14,8 +14,10 @@ from datetime import datetime, timedelta
 import nfl_week as nw
 
 WEBHOOK = os.environ.get("DISCORD_INJURY_WEBHOOK", "").strip()
-ROSTER = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/14/roster"
+ROSTER = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{}/roster"
 RAMS = "LAR"
+RAMS_ID = "14"
+RAMS_GOLD = 0xFFA300
 
 # status -> (emoji, sort order). Anything else lands at the end.
 STATUS = {
@@ -35,22 +37,21 @@ def get(url):
         return json.load(r)
 
 
-def roster():
-    data = get(ROSTER)
+def roster(team_id):
+    data = get(ROSTER.format(team_id))
     out = []
     for group in data.get("athletes", []):
         out.extend(group.get("items", [group]) if isinstance(group, dict) else [])
     return out
 
 
-def injured(now):
+def injured(team_id, now):
     rows = []
-    for a in roster():
+    for a in roster(team_id):
         inj = a.get("injuries") or []
         if not inj:
             continue
         i = inj[0]
-        status = i.get("status") or "Unknown"
         new = False
         if i.get("date"):
             try:
@@ -59,7 +60,7 @@ def injured(now):
             except ValueError:
                 pass
         rows.append({
-            "status": status,
+            "status": i.get("status") or "Unknown",
             "name": a.get("fullName") or a.get("displayName", "?"),
             "jersey": a.get("jersey", ""),
             "pos": (a.get("position") or {}).get("abbreviation", ""),
@@ -69,7 +70,7 @@ def injured(now):
 
 
 def next_game(now):
-    """Rams game this week, if any: ('vs'/'@', opponent short name, kickoff)."""
+    """Rams game this week, if any: {'side': 'vs'/'@', 'opp': team dict, 'kick': datetime}."""
     try:
         start, end = nw.week_range(now)
         events, _ = nw.fetch_events(start, end)
@@ -82,8 +83,8 @@ def next_game(now):
             continue
         kick = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).astimezone(nw.PT)
         if teams["home"].get("abbreviation") == RAMS:
-            return "vs", teams["away"]["shortDisplayName"], kick
-        return "@", teams["home"]["shortDisplayName"], kick
+            return {"side": "vs", "opp": teams["away"], "kick": kick}
+        return {"side": "@", "opp": teams["home"], "kick": kick}
     return None
 
 
@@ -99,49 +100,84 @@ def chunk(lines, limit=1024):
     return out
 
 
-def build(now=None):
-    now = now or datetime.now(nw.PT)
-    rows = injured(now)
+def status_fields(rows, compact_ir=False):
     groups = {}
     for r in rows:
         groups.setdefault(r["status"], []).append(r)
-
     fields = []
     for status in sorted(groups, key=lambda s: STATUS.get(s, ("", 4))[1]):
-        emoji = STATUS.get(status, ("❔", 4))[0]
+        emoji = STATUS.get(status, ("\u2754", 4))[0]
+        people = sorted(groups[status], key=lambda r: r["name"])
+        header = f"{emoji}  {status.upper()}  ({len(people)})"
+        if compact_ir and status == "Injured Reserve":
+            fields.append({"name": header, "inline": False,
+                           "value": ", ".join(f"{r['name']} ({r['pos']})" for r in people)[:1024]})
+            continue
         lines = [f"`#{r['jersey']:>2}` **{r['name']}** - {r['pos']}" + ("  \U0001F195" if r["new"] else "")
-                 for r in sorted(groups[status], key=lambda r: r["name"])]
+                 for r in people]
         for i, val in enumerate(chunk(lines)):
-            name = f"{emoji}  {status.upper()}  ({len(lines)})" if i == 0 else "​"
-            fields.append({"name": name, "value": val, "inline": False})
+            fields.append({"name": header if i == 0 else "\u200b", "value": val, "inline": False})
+    return fields[:25]
 
+
+def team_color(team, fallback=0x6B7280):
+    try:
+        return int(team.get("color", ""), 16)
+    except ValueError:
+        return fallback
+
+
+def embed_size(e):
+    return len(e.get("title", "")) + len(e.get("description", "")) + len(e.get("footer", {}).get("text", "")) \
+        + sum(len(f["name"]) + len(f["value"]) for f in e.get("fields", []))
+
+
+def build(now=None):
+    now = now or datetime.now(nw.PT)
     ng = next_game(now)
+    tz = now.strftime("%Z")
+
     desc = f"**{now:%A, %b} {now.day}**"
     if ng:
-        side, opp, kick = ng
-        desc += f"\nNext up: **{side} {opp}**  |  {kick:%a, %b} {kick.day}, {nw.fmt_time(kick)} {now:%Z}"
-    if not fields:
-        desc += "\n\nNo one on the injury report. \U0001F40F"
+        k = ng["kick"]
+        desc += f"\nNext up: **{ng['side']} {ng['opp']['shortDisplayName']}**  |  {k:%a, %b} {k.day}, {nw.fmt_time(k)} {tz}"
+    else:
+        desc += "\nBye week. \U0001F634"
 
-    return {
-        "username": "Rams Injury Report",
-        "embeds": [{
-            "title": "\U0001F40F  Rams Injury Report",
-            "description": desc,
-            "color": 0xFFA300,
-            "fields": fields[:25],
-            "footer": {"text": "\U0001F195 = updated in the last day  •  Data: ESPN"},
-        }],
-    }
+    teams = [("\U0001F40F  Rams Injury Report", RAMS_ID, RAMS_GOLD, desc)]
+    if ng and ng["opp"].get("id"):
+        opp = ng["opp"]
+        teams.append((f"\U0001F19A  {opp.get('displayName', opp['shortDisplayName'])} Injury Report",
+                      opp["id"], team_color(opp), None))
+
+    for compact in (False, True):  # Discord caps all embeds at 6000 chars total
+        embeds = []
+        for title, tid, color, d in teams:
+            try:
+                rows = injured(tid, now)
+            except Exception as e:
+                print(f"Roster fetch failed for team {tid}: {e}", file=sys.stderr)
+                continue
+            e = {"title": title, "color": color, "fields": status_fields(rows, compact)}
+            if d:
+                e["description"] = d
+            if not rows:
+                e["description"] = (d + "\n\n" if d else "") + "No one on the injury report."
+            embeds.append(e)
+        if sum(embed_size(e) for e in embeds) < 5800:
+            break
+    if embeds:
+        embeds[-1]["footer"] = {"text": "\U0001F195 = updated in the last day  \u2022  Data: ESPN"}
+    return {"username": "Rams Injury Report", "embeds": embeds}
 
 
 def main():
     payload = build()
     if not WEBHOOK:
-        e = payload["embeds"][0]
-        print(e["title"] + "\n" + e["description"])
-        for f in e["fields"]:
-            print("\n" + f["name"] + "\n" + f["value"].replace("**", "").replace("`", ""))
+        for e in payload["embeds"]:
+            print("\n=== " + e["title"] + "\n" + e.get("description", ""))
+            for f in e["fields"]:
+                print("\n" + f["name"] + "\n" + f["value"].replace("**", "").replace("`", ""))
         return
 
     req = urllib.request.Request(WEBHOOK, data=json.dumps(payload).encode(), method="POST",
