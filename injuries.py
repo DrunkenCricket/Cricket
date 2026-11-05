@@ -29,6 +29,14 @@ RAMS_GOLD = 0xFFA300
 # Invisible 1200x1 image so every card stretches to the same full width.
 SPACER = {"url": "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/assets/spacer.png"}
 
+# Position order within each status group: QB > RB > WR > TE > OL > DL > LB > CB > S > PK > P > PR > KR
+POS_ORDER = {}
+for i, group in enumerate([["QB"], ["RB", "FB"], ["WR"], ["TE"], ["OL", "OT", "T", "G", "OG", "C"],
+                           ["DL", "DE", "DT", "NT"], ["LB", "ILB", "OLB", "MLB"], ["CB", "DB"],
+                           ["S", "SS", "FS"], ["PK", "K"], ["P"], ["PR"], ["KR"], ["LS"]]):
+    for pos in group:
+        POS_ORDER[pos] = i
+
 # status -> (emoji, sort order). Anything else lands at the end.
 STATUS = {
     "Out": ("\U0001F534", 0),
@@ -117,13 +125,13 @@ def status_fields(rows, compact_ir=False):
     fields = []
     for status in sorted(groups, key=lambda s: STATUS.get(s, ("", 4))[1]):
         emoji = STATUS.get(status, ("\u2754", 4))[0]
-        people = sorted(groups[status], key=lambda r: r["name"])
+        people = sorted(groups[status], key=lambda r: (POS_ORDER.get(r["pos"], 99), r["name"]))
         header = f"{emoji}  {status.upper()}  ({len(people)})"
         if compact_ir and status == "Injured Reserve":
             fields.append({"name": header, "inline": False,
-                           "value": ", ".join(f"{names.full(r['name'])} ({r['pos']})" for r in people)[:1024]})
+                           "value": ", ".join(f"#{r['jersey']} - {r['pos']} - {names.full(r['name'])}" for r in people)[:1024]})
             continue
-        lines = [f"`#{r['jersey']:>2}` **{names.full(r['name'])}** - {r['pos']}" + ("  \U0001F195" if r["new"] else "")
+        lines = [f"`#{r['jersey']:>2}` - {r['pos']} - **{names.full(r['name'])}**" + ("  \U0001F195" if r["new"] else "")
                  for r in people]
         for i, val in enumerate(chunk(lines)):
             fields.append({"name": header if i == 0 else "\u200b", "value": val, "inline": False})
