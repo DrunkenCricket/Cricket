@@ -7,6 +7,7 @@ with anyone ruled out (Out, Doubtful, IR, PUP, suspended) removed.
   DISCORD_INJURY_WEBHOOK=... python gameday.py   # posts if kickoff is 15-90 min away
   PREVIEW=true python gameday.py                 # print this week's lineup, no post
   FORCE=true  python gameday.py                  # post now for this week's game
+  GAME_DATE=2026-11-01 PREVIEW=true python gameday.py   # preview another week's game
 """
 import json
 import os
@@ -23,6 +24,7 @@ import nfl_week as nw
 WEBHOOK = os.environ.get("DISCORD_INJURY_WEBHOOK", "").strip()
 PREVIEW = os.environ.get("PREVIEW", "").lower() == "true"
 FORCE = os.environ.get("FORCE", "").lower() == "true"
+GAME_DATE = os.environ.get("GAME_DATE", "").strip()
 STATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "gameday.json")
 DEPTH = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/{}/teams/14/depthcharts"
 RAMS_BLUE = 0x003594
@@ -123,7 +125,10 @@ def build(game, now):
 
 def main():
     now = datetime.now(nw.PT)
-    game = rams_game(now)
+    when = now
+    if GAME_DATE:
+        when = datetime.fromisoformat(GAME_DATE).replace(hour=12, tzinfo=nw.PT)
+    game = rams_game(when)
     if not game:
         print("No Rams game this week.")
         return
