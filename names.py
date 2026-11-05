@@ -33,9 +33,7 @@ def short(athlete):
     name = athlete.get("fullName") or athlete.get("displayName") or "?"
     if is_konata(name):
         return konata()
-    if athlete.get("lastName"):
-        return athlete["lastName"]
-    parts = name.split()
+    parts = (athlete.get("lastName") or name).split()
     while len(parts) > 1 and parts[-1].lower() in SUFFIXES:
         parts.pop()
     return parts[-1]
