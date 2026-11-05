@@ -38,3 +38,14 @@ def short(athlete):
     while len(parts) > 1 and parts[-1].lower() in SUFFIXES:
         parts.pop()
     return " ".join(parts) if last else parts[-1]
+
+
+def first_last(athlete):
+    """'First Last' for lineup lists, suffixes dropped (full fake name for Konata)."""
+    name = athlete.get("fullName") or athlete.get("displayName") or "?"
+    if is_konata(name):
+        return konata()
+    parts = name.split()
+    while len(parts) > 2 and parts[-1].lower() in SUFFIXES:
+        parts.pop()
+    return " ".join(parts)

@@ -101,7 +101,7 @@ def build(game, now):
                 if not a or aid in seen or status(a) in RULED_OUT:
                     continue
                 seen.add(aid)
-                name = names.short(a) + ("  `Q`" if status(a) == "Questionable" else "")
+                name = names.first_last(a) + ("  `Q`" if status(a) == "Questionable" else "")
                 shown.append(f"**{name}**" if rank == 1 else name)
             if shown:
                 fields.append({"name": label, "value": "\n".join(shown[:cap])[:1024], "inline": True})
