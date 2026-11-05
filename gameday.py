@@ -139,7 +139,8 @@ def main():
 
     mins = (game["kick"] - now).total_seconds() / 60
     if not (PREVIEW or FORCE):
-        if _posted(game["id"]):
+        prev = _state()
+        if prev.get("event") == game["id"] and not prev.get("manual"):
             print("Already posted for this game.")
             return
         if not 15 <= mins <= 90:
@@ -157,7 +158,7 @@ def main():
 
     inj.WEBHOOK = WEBHOOK
     prev = _state()
-    if FORCE and prev.get("event") == game["id"] and prev.get("message_id"):
+    if prev.get("event") == game["id"] and prev.get("message_id"):
         try:
             inj.discord("DELETE", inj.webhook_url(f"/messages/{prev['message_id']}"))
             print(f"Deleted previous post {prev['message_id']}.")
@@ -169,7 +170,7 @@ def main():
         sys.exit(f"Discord {e.code}: {e.read().decode(errors='replace')}")
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
     with open(STATE, "w") as f:
-        json.dump({"event": game["id"], "message_id": msg.get("id"),
+        json.dump({"event": game["id"], "message_id": msg.get("id"), "manual": FORCE,
                    "posted": now.isoformat(timespec="minutes")}, f, indent=2)
         f.write("\n")
     print(f"Posted lineup {msg.get('id')}.")
@@ -182,9 +183,6 @@ def _state():
     except (OSError, ValueError):
         return {}
 
-
-def _posted(event_id):
-    return _state().get("event") == event_id
 
 
 if __name__ == "__main__":
