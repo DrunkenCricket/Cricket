@@ -3,7 +3,12 @@
 
   DISCORD_INJURY_WEBHOOK=https://discord.com/api/webhooks/... python injuries.py
   python injuries.py    # no webhook = dry run
+
+Posts only when the report changes. Deletes the previous post first, then posts
+the new one. State (last message id + content hash) lives in state/injury.json,
+which the workflow commits back to the repo. FORCE=true posts regardless.
 """
+import hashlib
 import json
 import os
 import sys
@@ -14,6 +19,8 @@ from datetime import datetime, timedelta
 import nfl_week as nw
 
 WEBHOOK = os.environ.get("DISCORD_INJURY_WEBHOOK", "").strip()
+FORCE = os.environ.get("FORCE", "").lower() == "true"
+STATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "injury.json")
 ROSTER = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{}/roster"
 RAMS = "LAR"
 RAMS_ID = "14"
@@ -137,7 +144,7 @@ def build(now=None):
     ng = next_game(now)
     tz = now.strftime("%Z")
 
-    desc = f"**{now:%A, %b} {now.day}**"
+    desc = f"**Updated {now:%a, %b} {now.day}, {nw.fmt_time(now)} {tz}**"
     if ng:
         k = ng["kick"]
         desc += f"\nNext up: **{ng['side']} {ng['opp']['shortDisplayName']}**  |  {k:%a, %b} {k.day}, {nw.fmt_time(k)} {tz}"
@@ -151,13 +158,15 @@ def build(now=None):
                       opp["id"], team_color(opp), None))
 
     for compact in (False, True):  # Discord caps all embeds at 6000 chars total
-        embeds = []
+        embeds, sig, failed = [], [], False
         for title, tid, color, d in teams:
             try:
                 rows = injured(tid, now)
             except Exception as e:
                 print(f"Roster fetch failed for team {tid}: {e}", file=sys.stderr)
+                failed = True
                 continue
+            sig.append([tid, sorted([r["status"], r["name"]] for r in rows)])
             e = {"title": title, "color": color, "fields": status_fields(rows, compact)}
             if d:
                 e["description"] = d
@@ -168,25 +177,75 @@ def build(now=None):
             break
     if embeds:
         embeds[-1]["footer"] = {"text": "\U0001F195 = updated in the last day  \u2022  Data: ESPN"}
-    return {"username": "Rams Injury Report", "embeds": embeds}
+    if ng:
+        sig.append([ng["opp"].get("id"), ng["kick"].isoformat()])
+    digest = hashlib.sha256(json.dumps(sig, sort_keys=True).encode()).hexdigest()
+    return {"username": "Rams Injury Report", "embeds": embeds}, digest, failed
+
+
+def load_state():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state):
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    with open(STATE, "w") as f:
+        json.dump(state, f, indent=2)
+        f.write("\n")
+
+
+def webhook_url(suffix="", query=""):
+    base, _, q = WEBHOOK.partition("?")
+    parts = [p for p in (q, query) if p]
+    return base + suffix + ("?" + "&".join(parts) if parts else "")
+
+
+def discord(method, url, payload=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(url, data=data, method=method,
+                                 headers={**nw.UA, "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        body = r.read()
+        return json.loads(body) if body else {}
 
 
 def main():
-    payload = build()
+    payload, digest, failed = build()
     if not WEBHOOK:
         for e in payload["embeds"]:
             print("\n=== " + e["title"] + "\n" + e.get("description", ""))
             for f in e["fields"]:
                 print("\n" + f["name"] + "\n" + f["value"].replace("**", "").replace("`", ""))
+        print(f"\nhash {digest[:12]}")
         return
 
-    req = urllib.request.Request(WEBHOOK, data=json.dumps(payload).encode(), method="POST",
-                                 headers={**nw.UA, "Content-Type": "application/json"})
+    state = load_state()
+    if failed and not FORCE:
+        print("ESPN fetch failed for a team, skipping this run.")
+        return
+    if digest == state.get("hash") and not FORCE:
+        print("No change since last post.")
+        return
+
+    old = state.get("message_id")
+    if old:
+        try:
+            discord("DELETE", webhook_url(f"/messages/{old}"))
+            print(f"Deleted previous post {old}.")
+        except urllib.error.HTTPError as e:
+            print(f"Could not delete {old} ({e.code}), continuing.")
+
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            print(f"Posted to Discord ({r.status}).")
+        msg = discord("POST", webhook_url(query="wait=true"), payload)
     except urllib.error.HTTPError as e:
         sys.exit(f"Discord {e.code}: {e.read().decode(errors='replace')}")
+    save_state({"message_id": msg.get("id"), "hash": digest,
+                "posted": datetime.now(nw.PT).isoformat(timespec="minutes")})
+    print(f"Posted new report {msg.get('id')}.")
 
 
 if __name__ == "__main__":

@@ -2,8 +2,15 @@ name: Rams Injury Report
 
 on:
   schedule:
-    - cron: "30 22 * * 3-5"   # Wed-Fri 2:30 PM PST, after the NFL's daily injury reports
-  workflow_dispatch:
+    - cron: "17 * * * *"   # every hour; only posts when the report changes
+  workflow_dispatch:        # manual runs always post
+
+permissions:
+  contents: write           # to save state/injury.json
+
+concurrency:
+  group: injury-report
+  cancel-in-progress: false
 
 jobs:
   post:
@@ -16,3 +23,12 @@ jobs:
       - run: python injuries.py
         env:
           DISCORD_INJURY_WEBHOOK: ${{ secrets.INJURY_REPORT }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Save state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/injury.json 2>/dev/null || exit 0
+          git diff --cached --quiet && exit 0
+          git commit -m "Update injury report state"
+          git push
