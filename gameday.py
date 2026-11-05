@@ -74,6 +74,10 @@ def depth_chart(season):
     return out
 
 
+UNIT_COLORS = [RAMS_BLUE, 0xFFA300, 0x8A8D8F]  # offense, defense, special teams
+BLANK = {"name": "\u200b", "value": "\u200b", "inline": True}
+
+
 def build(game, now):
     season = game["kick"].year if game["kick"].month >= 3 else game["kick"].year - 1
     depth = depth_chart(season)
@@ -82,45 +86,41 @@ def build(game, now):
     def status(a):
         return ((a.get("injuries") or [{}])[0]).get("status")
 
-    fields = []
-    for title, rows in GROUPS:
-        lines = []
+    units = []
+    for (title, rows), color in zip(GROUPS, UNIT_COLORS):
+        fields = []
         for label, keys, cap in rows:
             entries = sorted((r, keys.index(k), s, aid)
                              for k in keys for r, s, aid in depth.get(k, []))
             seen, shown = set(), []
-            for _, _, _, aid in entries:
+            for rank, _, _, aid in entries:
                 a = roster.get(aid)
                 if not a or aid in seen or status(a) in RULED_OUT:
                     continue
                 seen.add(aid)
-                shown.append(names.short(a) + (" (Q)" if status(a) == "Questionable" else ""))
+                name = names.short(a) + ("  `Q`" if status(a) == "Questionable" else "")
+                shown.append(f"**{name}**" if rank == 1 else name)
             if shown:
-                lines.append(f"**{label}:** " + ", ".join(shown[:cap]))
-        fields.append({"name": title, "value": "\n".join(lines)[:1024] or "​", "inline": True})
+                fields.append({"name": label, "value": "\n".join(shown[:cap])[:1024], "inline": True})
+        while len(fields) % 3:
+            fields.append(BLANK)  # keep the 3-column grid aligned
+        units.append({"title": title, "color": color, "fields": fields or [BLANK]})
 
     out = sorted((a for a in roster.values() if status(a) in RULED_OUT - {"Injured Reserve"}),
                  key=lambda a: a.get("fullName", ""))
     k = game["kick"]
-    desc = f"**{game['side']} {game['opp']['shortDisplayName']}**  |  Kickoff {nw.fmt_time(k)} {k:%Z}"
+    desc = f"## {game['side']} {game['opp']['shortDisplayName']}\n\U0001F552  Kickoff **{nw.fmt_time(k)} {k:%Z}**"
     if game["venue"]:
-        desc += f"\n\U0001F4CD {game['venue']}"
+        desc += f"\n\U0001F4CD  {game['venue']}"
     if out:
-        desc += "\n\n\U0001F6AB **Not playing:** " + ", ".join(
+        desc += "\n\n\U0001F6AB  **Not playing:** " + ", ".join(
             f"{names.full(a.get('fullName', '?'))} ({(a.get('position') or {}).get('abbreviation', '')})"
             for a in out)
 
-    return {
-        "username": "Rams Game Day",
-        "embeds": [{
-            "title": "\U0001F40F  Rams Game Day Lineup",
-            "description": desc,
-            "color": RAMS_BLUE,
-            "fields": fields,
-            "footer": {"text": "Projected from the ESPN depth chart minus players ruled out  •  "
-                               "(Q) = questionable  •  Official inactives drop 90 min before kickoff"},
-        }],
-    }
+    header = {"title": "\U0001F40F  Rams Game Day Lineup", "description": desc, "color": RAMS_BLUE}
+    units[-1]["footer"] = {"text": "Bold = starter  \u2022  Q = questionable  \u2022  Projected from the ESPN "
+                                   "depth chart minus players ruled out. Official inactives drop 90 min before kickoff."}
+    return {"username": "Rams Game Day", "embeds": [header] + units}
 
 
 def main():
@@ -144,14 +144,21 @@ def main():
 
     payload = build(game, now)
     if PREVIEW or not WEBHOOK:
-        e = payload["embeds"][0]
-        print("=== " + e["title"] + "\n" + e["description"])
-        for f in e["fields"]:
-            print("\n" + f["name"] + "\n" + f["value"].replace("**", ""))
-        print("\n" + e["footer"]["text"])
+        for e in payload["embeds"]:
+            print("\n=== " + e["title"] + ("\n" + e["description"] if e.get("description") else ""))
+            for f in e.get("fields", []):
+                if f["name"] != "\u200b":
+                    print(f"  [{f['name']}] " + " / ".join(f["value"].replace("**", "").split("\n")))
         return
 
     inj.WEBHOOK = WEBHOOK
+    prev = _state()
+    if FORCE and prev.get("event") == game["id"] and prev.get("message_id"):
+        try:
+            inj.discord("DELETE", inj.webhook_url(f"/messages/{prev['message_id']}"))
+            print(f"Deleted previous post {prev['message_id']}.")
+        except urllib.error.HTTPError as e:
+            print(f"Could not delete previous post ({e.code}), continuing.")
     try:
         msg = inj.discord("POST", inj.webhook_url(query="wait=true"), payload)
     except urllib.error.HTTPError as e:
@@ -164,12 +171,16 @@ def main():
     print(f"Posted lineup {msg.get('id')}.")
 
 
-def _posted(event_id):
+def _state():
     try:
         with open(STATE) as f:
-            return json.load(f).get("event") == event_id
+            return json.load(f)
     except (OSError, ValueError):
-        return False
+        return {}
+
+
+def _posted(event_id):
+    return _state().get("event") == event_id
 
 
 if __name__ == "__main__":
