@@ -26,6 +26,8 @@ ROSTER = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{}/ro
 RAMS = "LAR"
 RAMS_ID = "14"
 RAMS_GOLD = 0xFFA300
+# Invisible 1200x1 image so every card stretches to the same full width.
+SPACER = {"url": "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/assets/spacer.png"}
 
 # status -> (emoji, sort order). Anything else lands at the end.
 STATUS = {
@@ -168,7 +170,7 @@ def build(now=None, ng=None):
                 failed = True
                 continue
             sig.append([tid, sorted([r["status"], r["name"]] for r in rows)])
-            e = {"title": title, "color": color, "fields": status_fields(rows, compact)}
+            e = {"title": title, "color": color, "fields": status_fields(rows, compact), "image": SPACER}
             if d:
                 e["description"] = d
             if not rows:
