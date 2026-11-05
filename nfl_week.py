@@ -8,6 +8,7 @@ Usage:
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from collections import OrderedDict
 from datetime import datetime, timedelta
@@ -15,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 PT = ZoneInfo("America/Los_Angeles")
 WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
-API = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={}-{}&limit=100"
+API = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={}"
 UA = {"User-Agent": "Mozilla/5.0 nfl-week-discord"}
 
 
@@ -34,13 +35,25 @@ def fmt_day(d):
 
 
 def fetch_events(start, end):
-    # Pad a day on each side, then filter by Pacific date below.
-    a = (start - timedelta(days=1)).strftime("%Y%m%d")
-    b = (end + timedelta(days=1)).strftime("%Y%m%d")
-    req = urllib.request.Request(API.format(a, b), headers=UA)
-    with urllib.request.urlopen(req, timeout=20) as r:
-        data = json.load(r)
-    return data.get("events", []), data.get("week", {}).get("number")
+    """One request per day (ESPN rejects date ranges). Pads a day on each
+    side, dedupes by game id, then build() filters by Pacific date."""
+    events, week_no = {}, None
+    d = start - timedelta(days=1)
+    while d <= end + timedelta(days=1):
+        req = urllib.request.Request(API.format(d.strftime("%Y%m%d")), headers=UA)
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                data = json.load(r)
+        except urllib.error.HTTPError as e:
+            print(f"ESPN {e.code} for {d}, skipping", file=sys.stderr)
+            d += timedelta(days=1)
+            continue
+        for ev in data.get("events", []):
+            events[ev["id"]] = ev
+        if start <= d <= end and week_no is None:
+            week_no = data.get("week", {}).get("number")
+        d += timedelta(days=1)
+    return list(events.values()), week_no
 
 
 def game_line(ev):
@@ -106,10 +119,11 @@ def main():
     body = json.dumps(to_discord(title, days, tz)).encode()
     req = urllib.request.Request(WEBHOOK, data=body, method="POST",
                                  headers={**UA, "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=20) as r:
-        if r.status not in (200, 204):
-            sys.exit(f"Discord returned {r.status}")
-    print("Posted to Discord.")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            print(f"Posted to Discord ({r.status}).")
+    except urllib.error.HTTPError as e:
+        sys.exit(f"Discord {e.code}: {e.read().decode(errors='replace')}")
 
 
 if __name__ == "__main__":
