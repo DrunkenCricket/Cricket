@@ -31,4 +31,4 @@ jobs:
           git add state/injury.json 2>/dev/null || exit 0
           git diff --cached --quiet && exit 0
           git commit -m "Update injury report state"
-          git push
+          git pull --rebase -q && git push

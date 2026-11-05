@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 
+import names
 import nfl_week as nw
 
 WEBHOOK = os.environ.get("DISCORD_INJURY_WEBHOOK", "").strip()
@@ -118,9 +119,9 @@ def status_fields(rows, compact_ir=False):
         header = f"{emoji}  {status.upper()}  ({len(people)})"
         if compact_ir and status == "Injured Reserve":
             fields.append({"name": header, "inline": False,
-                           "value": ", ".join(f"{r['name']} ({r['pos']})" for r in people)[:1024]})
+                           "value": ", ".join(f"{names.full(r['name'])} ({r['pos']})" for r in people)[:1024]})
             continue
-        lines = [f"`#{r['jersey']:>2}` **{r['name']}** - {r['pos']}" + ("  \U0001F195" if r["new"] else "")
+        lines = [f"`#{r['jersey']:>2}` **{names.full(r['name'])}** - {r['pos']}" + ("  \U0001F195" if r["new"] else "")
                  for r in people]
         for i, val in enumerate(chunk(lines)):
             fields.append({"name": header if i == 0 else "\u200b", "value": val, "inline": False})
@@ -139,9 +140,9 @@ def embed_size(e):
         + sum(len(f["name"]) + len(f["value"]) for f in e.get("fields", []))
 
 
-def build(now=None):
+def build(now=None, ng=None):
     now = now or datetime.now(nw.PT)
-    ng = next_game(now)
+    ng = ng or next_game(now)
     tz = now.strftime("%Z")
 
     desc = f"**Updated {now:%a, %b} {now.day}, {nw.fmt_time(now)} {tz}**"
@@ -214,7 +215,12 @@ def discord(method, url, payload=None):
 
 
 def main():
-    payload, digest, failed = build()
+    now = datetime.now(nw.PT)
+    ng = next_game(now)
+    if WEBHOOK and ng and now.date() >= ng["kick"].date() and not FORCE:
+        print("Game day or after, no updates until next week's report.")
+        return
+    payload, digest, failed = build(now, ng)
     if not WEBHOOK:
         for e in payload["embeds"]:
             print("\n=== " + e["title"] + "\n" + e.get("description", ""))
