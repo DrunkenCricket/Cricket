@@ -1,0 +1,8 @@
+name: debug
+on: push
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python debug_espn.py
