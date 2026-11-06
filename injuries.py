@@ -63,13 +63,29 @@ def roster(team_id):
     return out
 
 
+LONG_TERM = {"Injured Reserve", "Suspension", "Physically Unable to Perform"}
+
+
+def player_status(a):
+    """Injury status, corrected for stale ESPN data. ESPN files reserve-list players
+    under athlete status 'day-to-day' but sometimes leaves an old Questionable/Out tag
+    on them (e.g. Keir Thomas II). Treat anyone on that list as Injured Reserve."""
+    inj = a.get("injuries") or []
+    status = (inj[0].get("status") if inj else None) or None
+    on_reserve = (a.get("status") or {}).get("type") == "day-to-day"
+    if on_reserve and status not in LONG_TERM:
+        return "Injured Reserve"
+    return status
+
+
 def injured(team_id, now):
     rows = []
     for a in roster(team_id):
         inj = a.get("injuries") or []
-        if not inj:
+        status = player_status(a)
+        if not status:
             continue
-        i = inj[0]
+        i = inj[0] if inj else {}
         new = False
         if i.get("date"):
             try:
@@ -78,7 +94,7 @@ def injured(team_id, now):
             except ValueError:
                 pass
         rows.append({
-            "status": i.get("status") or "Unknown",
+            "status": status,
             "name": a.get("fullName") or a.get("displayName", "?"),
             "jersey": a.get("jersey", ""),
             "pos": (a.get("position") or {}).get("abbreviation", ""),

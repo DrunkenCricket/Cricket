@@ -86,8 +86,7 @@ def build(game, now):
     depth = depth_chart(season)
     roster = {str(a.get("id")): a for a in inj.roster(inj.RAMS_ID)}
 
-    def status(a):
-        return ((a.get("injuries") or [{}])[0]).get("status")
+    status = inj.player_status
 
     units = []
     for (title, rows), color in zip(GROUPS, UNIT_COLORS):
