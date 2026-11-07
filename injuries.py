@@ -39,9 +39,9 @@ for i, group in enumerate([["QB"], ["RB", "FB"], ["WR"], ["TE"], ["OL", "OT", "T
 
 # status -> (emoji, sort order). Anything else lands at the end.
 STATUS = {
-    "Out": ("\U0001F534", 0),
+    "Questionable": ("\U0001F7E1", 0),
     "Doubtful": ("\U0001F7E0", 1),
-    "Questionable": ("\U0001F7E1", 2),
+    "Out": ("\U0001F534", 2),
     "Day-To-Day": ("\U0001F7E2", 3),
     "Suspension": ("\U0001F6AB", 5),
     "Physically Unable to Perform": ("⚪", 6),
