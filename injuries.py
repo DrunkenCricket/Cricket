@@ -73,7 +73,9 @@ def player_status(a):
     inj = a.get("injuries") or []
     status = (inj[0].get("status") if inj else None) or None
     on_reserve = (a.get("status") or {}).get("type") == "day-to-day"
-    if on_reserve and status not in LONG_TERM:
+    # Only override an existing tag. A reserve-coded player with no tag at all
+    # (e.g. Trey Amos after coming off IR) is healthy.
+    if on_reserve and status and status not in LONG_TERM:
         return "Injured Reserve"
     return status
 
