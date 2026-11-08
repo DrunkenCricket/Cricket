@@ -38,7 +38,7 @@ GROUPS = [
     ("\U0001F6E1️  DEFENSE", [("DL", ["lde", "nt", "rde", "de", "dt"], 7),
                                    ("LB", ["wlb", "lilb", "rilb", "slb", "mlb", "olb"], 7),
                                    ("CB", ["lcb", "rcb", "nb"], 6), ("S", ["ss", "fs"], 5)]),
-    ("\U0001F9B5  SPECIAL TEAMS", [("K", ["pk"], 1), ("P", ["p"], 1), ("LS", ["ls"], 1),
+    ("\U0001F9B5  SPECIAL TEAMS", [("K (FG)", ["pk"], 1), ("K (KO)", ["_ko"], 2), ("P", ["p"], 1), ("LS", ["ls"], 1),
                                   ("KR", ["kr"], 2), ("PR", ["pr"], 2)]),
 ]
 
@@ -87,6 +87,13 @@ def build(game, now):
     roster = {str(a.get("id")): a for a in inj.roster(inj.RAMS_ID)}
 
     status = inj.player_status
+
+    # ESPN's depth chart has one kicker spot (field goals). Any other healthy kicker
+    # on the roster is the kickoff specialist (e.g. Karty for kickoffs, McManus for FGs).
+    fg = {aid for _, _, aid in depth.get("pk", [])[:1]}
+    depth["_ko"] = [(1, 1, aid) for aid, a in roster.items()
+                    if (a.get("position") or {}).get("abbreviation") in ("PK", "K")
+                    and aid not in fg and status(a) not in RULED_OUT]
 
     units = []
     for (title, rows), color in zip(GROUPS, UNIT_COLORS):
