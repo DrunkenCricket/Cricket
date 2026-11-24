@@ -14,6 +14,36 @@ COMMANDS = [
     {"name": "standings", "description": "Season pick'em leaderboard", "type": 1, "contexts": [0]},
     {"name": "mypicks", "description": "Your pick'em record, or someone else's", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose record to show", "required": False}]},
+    # ram game
+    {"name": "points", "description": "Your points, crates and the points leaderboard", "type": 1, "contexts": [0],
+     "options": [{"type": 6, "name": "user", "description": "Whose points to show", "required": False}]},
+    {"name": "crate", "description": "Open a crate (your first one is free, then 60 points)", "type": 1, "contexts": [0]},
+    {"name": "inventory", "description": "Everything you've unlocked for your ram", "type": 1, "contexts": [0]},
+    {"name": "equip", "description": "Put an item on your ram", "type": 1, "contexts": [0],
+     "options": [{"type": 3, "name": "item", "description": "Start typing an item name", "required": True, "autocomplete": True}]},
+    {"name": "unequip", "description": "Take an item off your ram", "type": 1, "contexts": [0],
+     "options": [{"type": 3, "name": "slot", "description": "Which slot", "required": True, "choices": [
+         {"name": n, "value": v} for v, n in [("pose", "Pose"), ("bg", "Background"), ("fleece", "Fleece"), ("horns", "Horns"),
+         ("shirt", "Shirt"), ("head", "Head"), ("eyes", "Eyes"), ("mouth", "Mouth"), ("neck", "Neck"), ("hand", "Hand"),
+         ("feet", "Feet"), ("gear", "Gear"), ("tattoo", "Tattoo"), ("marks", "Marks"), ("finish", "Finish")]]}]},
+    {"name": "body", "description": "Pick your ram's body type", "type": 1, "contexts": [0],
+     "options": [{"type": 3, "name": "type", "description": "Body type", "required": True, "choices": [
+         {"name": "Thin", "value": "thin"}, {"name": "Medium", "value": "med"}, {"name": "Large", "value": "large"}]}]},
+    {"name": "ram", "description": "Show a ram", "type": 1, "contexts": [0],
+     "options": [{"type": 6, "name": "user", "description": "Whose ram", "required": False}]},
+    {"name": "prop", "description": "Prop bets (admins)", "type": 1, "contexts": [0], "default_member_permissions": "32",
+     "options": [
+         {"type": 1, "name": "create", "description": "Post a bet: PLAYER gets AMOUNT+ STAT. Entry 20 points, a hit wins a crate.", "options": [
+             {"type": 3, "name": "player", "description": "Player name as ESPN shows it, e.g. Puka Nacua", "required": True},
+             {"type": 3, "name": "stat", "description": "Stat", "required": True, "choices": [
+                 {"name": n, "value": v} for v, n in [("rec_yds", "Receiving yards"), ("receptions", "Catches"), ("rec_td", "Receiving TDs"),
+                 ("rush_yds", "Rushing yards"), ("rush_td", "Rushing TDs"), ("pass_yds", "Passing yards"), ("pass_td", "Passing TDs"),
+                 ("tackles", "Tackles"), ("sacks", "Sacks")]]},
+             {"type": 10, "name": "amount", "description": "They need this many or more", "required": True, "min_value": 0.5},
+             {"type": 4, "name": "minutes", "description": "Close entries in N minutes (default: at kickoff)", "required": False, "min_value": 1, "max_value": 240}]},
+         {"type": 1, "name": "cancel", "description": "Cancel a bet and refund everyone", "options": [
+             {"type": 4, "name": "id", "description": "Bet number", "required": True}]},
+         {"type": 1, "name": "check", "description": "Check ESPN now and settle any finished bets"}]},
 ]
 
 if not TOKEN:

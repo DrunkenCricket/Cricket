@@ -14,6 +14,8 @@ const MEDALS = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
 
 import { handleSite } from "./site.js";
 import { runTimer } from "./timer.js";
+import { GAME_COMMANDS, gameCommand, gameButton, gameAutocomplete } from "./gamecmds.js";
+export { Game } from "./game.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -24,6 +26,15 @@ export default {
 
     const interaction = JSON.parse(body);
     if (interaction.type === 1) return json({ type: 1 }); // Discord's ping when you save the URL
+
+    try {
+      if (interaction.type === 2 && GAME_COMMANDS.has(interaction.data.name)) return json(await gameCommand(interaction, env, ctx));
+      if (interaction.type === 3) return json(await gameButton(interaction, env, ctx));
+      if (interaction.type === 4) return json(await gameAutocomplete(interaction, env));
+    } catch (err) {
+      console.log("game error", err.stack || err);
+      return reply({ content: "Something went wrong. Try again in a minute." }, true);
+    }
 
     if (interaction.type === 2) {
       const name = interaction.data.name;

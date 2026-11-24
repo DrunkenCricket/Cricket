@@ -54,6 +54,10 @@ export async function runTimer(now, env) {
   if (pt.minute === 0 && ((pt.weekday === "Mon" && pt.hour === 23) || (pt.weekday === "Tue" && pt.hour === 12))) {
     await dispatch(env, "pickem.yml");
   }
+  // Ram game: award pick points and settle prop bets (every 2 minutes).
+  if (pt.minute % 2 === 0 && env.GAME) {
+    try { await env.GAME.get(env.GAME.idFromName("main")).tick(); } catch (e) { console.log("game tick", e); }
+  }
   const kick = await ramsKickoff(pt);
   if (kick) {
     const minutesOut = Math.round((kick - now) / 60000);

@@ -5,6 +5,8 @@
 //
 // Needs the DISCORD_BOT_TOKEN Worker secret to read poll voters, avatars and logo emojis.
 
+import { renderRam, ITEMS, SLOT_NAMES } from "./ram.js";
+
 const RAW = "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/";
 const APP_ID = "1574684181361852416";
 const API = "https://discord.com/api/v10";
@@ -186,10 +188,32 @@ export async function handleSite(request, env, ctx) {
   } catch (e) {
     return json({ error: String(e.message || e) }, 10);
   }
+  const ram = pathname.match(/^\/ram\/(\d{5,25})(\.svg)?$/);
+  if (ram && env.GAME) {
+    const r = await env.GAME.get(env.GAME.idFromName("main")).look(ram[1]);
+    const look = r?.look || {};
+    const svg = renderRam(look, 512, "css");
+    if (ram[2]) return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=30" } });
+    return new Response(ramPage(r?.name || "Ram", svg, look), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=30" } });
+  }
   if (pathname === "/" || pathname === "/index.html") {
     return new Response(PAGE, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
   }
   return new Response("Not found", { status: 404 });
+}
+
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function ramPage(name, svg, look) {
+  const worn = Object.entries(look).filter(([, v]) => ITEMS[v]).map(([s, v]) => `<li><b>${esc(SLOT_NAMES[s] || s)}</b> ${esc(ITEMS[v].name)} <i class="${ITEMS[v].rarity}">${ITEMS[v].rarity}</i></li>`).join("");
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(name)}'s Ram</title><meta property="og:title" content="${esc(name)}'s Ram">
+<style>:root{--bg:#0d1328;--card:#151d3b;--ink:#eef2ff;--dim:#9aa6c7}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:16px;box-sizing:border-box}
+main{max-width:520px;width:100%}h1{margin:0 0 12px;font-size:24px}.ram{border-radius:20px;overflow:hidden;line-height:0}.ram svg{width:100%;height:auto}
+ul{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:6px}li{background:var(--card);border-radius:10px;padding:8px 12px;display:flex;gap:8px}li b{color:var(--dim);min-width:90px}
+i{margin-left:auto;font-style:normal;font-size:12px;text-transform:uppercase}.common{color:#9aa3b2}.rare{color:#3b82f6}.epic{color:#a855f7}.legendary{color:#ffa300}.mythic{color:#ff4fd8}.secret{color:#5ee08f}
+a{color:#ffc82c}</style></head><body><main><h1>🐏 ${esc(name)}'s Ram</h1><div class="ram">${svg}</div><ul>${worn}</ul>
+<p><a href="/">Pick'em board</a></p></main></body></html>`;
 }
 
 const PAGE = `<!doctype html>

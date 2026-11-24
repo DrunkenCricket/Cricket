@@ -9,3 +9,12 @@ workers_dev = true
 # Every minute: start GitHub jobs at the exact time (see timer.js).
 [triggers]
 crons = ["* * * * *"]
+
+# Ram game state (points, crates, items, bets): one SQLite Durable Object.
+[[durable_objects.bindings]]
+name = "GAME"
+class_name = "Game"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Game"]
