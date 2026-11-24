@@ -219,10 +219,11 @@ async function lockerApi(request, env) {
 
 async function betsData(env, ctx) {
   if (!env.GAME) return { bets: [] };
-  const [bets, hist] = await Promise.all([env.GAME.get(env.GAME.idFromName("main")).bets(), historyData(env, ctx).catch(() => ({ standings: [] }))]);
+  const stub = env.GAME.get(env.GAME.idFromName("main"));
+  const [bets, hist, fights] = await Promise.all([stub.bets(), historyData(env, ctx).catch(() => ({ standings: [] })), stub.recentFights()]);
   const av = Object.fromEntries(hist.standings.map((p) => [p.id, p.avatar]));
   for (const b of bets) for (const u of b.users) u.avatar = av[u.id] || avatarUrl(u.id, null);
-  return { bets };
+  return { bets, fights };
 }
 
 export async function handleSite(request, env, ctx) {
@@ -636,6 +637,8 @@ td.n{font-variant-numeric:tabular-nums}
 .empty{color:var(--muted);padding:40px;text-align:center}
 .bt{font-size:20px;font-weight:700;margin:4px 0 6px}.bt b{color:var(--gold)}.bet .faces{justify-content:flex-start}
 .bet.hit{border-color:var(--good)}.bet.miss,.bet.cancelled{opacity:.6}.rhit{color:var(--good);font-weight:700}.rmiss{color:#ef4444;font-weight:700}
+.fights{display:grid;gap:8px}.fight{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--text);text-decoration:none}
+.fight:hover{border-color:var(--gold)}.fight b{color:var(--gold)}.fight.expired,.fight.declined,.fight.cancelled{opacity:.55}.fight u{color:var(--gold)}
 h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacing:1px;margin:26px 0 10px}
 .pasture{height:560px}
 ${FIELD_CSS}
@@ -663,14 +666,14 @@ ${FIELD_CSS}
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets</button><button data-t="herd">Herd</button><a class="navlink" href="/lockeroom">Lockeroom</a></nav>
+<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><a class="navlink" href="/lockeroom">Lockeroom</a></nav>
 </div></header>
 <template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const view = document.getElementById("view"), sub = document.getElementById("sub");
-let week = null, hist = null, herd = null, bets = null, tab = "week", raf = 0;
+let week = null, hist = null, herd = null, bets = null, fights = [], tab = "week", raf = 0;
 const when = (iso) => new Date(iso).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"});
 
 function faces(users) {
@@ -823,7 +826,7 @@ function betsView() {
   if (!bets) { view.innerHTML = '<div class="empty">Loading bets...</div>'; return; }
   const open = bets.filter((b) => b.status === "open");
   sub.textContent = open.length + " open bet" + (open.length === 1 ? "" : "s") + " · 20 RUTS to enter, a hit wins a crate";
-  if (!bets.length) { view.innerHTML = '<div class="empty">No bets yet. Mods post them in Discord with /prop.</div>'; return; }
+  if (!bets.length && !fights.length) { view.innerHTML = '<div class="empty">No bets yet. Post one in Discord with /prop random or /prop auto.</div>'; return; }
   const left = (t) => { const m = Math.round((t - Date.now()) / 60000); return m <= 0 ? "closed" : m < 60 ? m + "m left" : m < 1440 ? Math.round(m / 60) + "h left" : Math.round(m / 1440) + "d left"; };
   const card = (b) => {
     const st = b.status === "open" ? (b.closes > Date.now() ? '<span class="lock">Closes ' + when(new Date(b.closes)) + " · " + left(b.closes) + "</span>" : "Live · entries closed")
@@ -834,8 +837,16 @@ function betsView() {
       + (b.users.length ? faces(b.users) : "") + "</div>";
   };
   const done = bets.filter((b) => b.status !== "open");
+  const fightRow = (f) => {
+    const wn = f.winner === f.a ? f.a_name : f.b_name;
+    const res = f.status === "done" ? "<b>" + esc(wn) + "</b> won " + f.stake * 2 + " RUTS · " + f.rounds + " headbutts"
+      : f.status === "pending" ? "Waiting for " + esc(f.b_name) + " to accept" : f.status === "declined" ? "Declined" : f.status === "expired" ? "Nobody showed up" : "Cancelled";
+    return '<a class="fight ' + f.status + '" href="/fight/' + f.id + '"><span>🐏💥🐏 ' + esc(f.a_name) + " vs " + esc(f.b_name) + "</span><span>" + res
+      + (f.status === "done" ? ' · <u>Watch</u>' : "") + "</span></a>";
+  };
+  const fightsHtml = fights.length ? '<h3 class="past">Ram fights</h3><div class="fights">' + fights.map(fightRow).join("") + "</div>" : "";
   view.innerHTML = (open.length ? '<p class="note">Take a bet with its button in Discord. Results settle live from the box score.</p><div class="grid">' + open.map(card).join("") + "</div>" : '<div class="empty">No open bets right now.</div>')
-    + (done.length ? '<h3 class="past">Last 7 days</h3><div class="grid">' + done.map(card).join("") + "</div>" : "");
+    + (done.length ? '<h3 class="past">Last 7 days</h3><div class="grid">' + done.map(card).join("") + "</div>" : "") + fightsHtml;
 }
 
 function render() {
@@ -873,7 +884,7 @@ fetch("/api/week").then((r) => r.json()).then((d) => { week = d; if (tab === "we
 render();
 fetch("/api/history").then((r) => r.json()).then((d) => { hist = d; if (tab === "last" || tab === "table") render(); }).catch(() => {});
 connect();
-fetch("/api/bets").then((r) => r.json()).then((d) => { bets = d.bets; if (tab === "bets") render(); }).catch(() => { bets = []; });
+fetch("/api/bets").then((r) => r.json()).then((d) => { bets = d.bets; fights = d.fights || []; if (tab === "bets") render(); }).catch(() => { bets = []; });
 fetch("/api/herd").then((r) => r.json()).then((d) => { herd = d; if (tab === "herd") render(); }).catch(() => { herd = { rams: [] }; });
 </script>
 </body>

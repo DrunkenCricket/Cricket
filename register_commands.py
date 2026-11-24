@@ -47,14 +47,6 @@ COMMANDS = [
      "options": [{"type": 6, "name": "user", "description": "Whose ram", "required": False}]},
     {"name": "prop", "description": "Prop bets: post one, post the Rams set, or a random one", "type": 1, "contexts": [0],
      "options": [
-         {"type": 1, "name": "create", "description": "Post a bet on a player you pick. The line comes from Sleeper unless you set a harder one.", "options": [
-             {"type": 3, "name": "player", "description": "Player name as ESPN shows it, e.g. Puka Nacua", "required": True},
-             {"type": 3, "name": "stat", "description": "Stat", "required": True, "choices": [
-                 {"name": n, "value": v} for v, n in [("rec_yds", "Receiving yards"), ("receptions", "Catches"), ("rec_td", "Receiving TDs"),
-                 ("rush_yds", "Rushing yards"), ("rush_td", "Rushing TDs"), ("pass_yds", "Passing yards"), ("pass_td", "Passing TDs"),
-                 ("any_td", "Anytime TD"), ("tackles", "Tackles"), ("sacks", "Sacks")]]},
-             {"type": 10, "name": "amount", "description": "Leave blank to use Sleeper's projection. Can't be set easy.", "required": False, "min_value": 1},
-             {"type": 4, "name": "minutes", "description": "Close entries in N minutes (default: at kickoff)", "required": False, "min_value": 1, "max_value": 240}]},
          {"type": 1, "name": "auto", "description": "Post this week's Rams bets (lines from Sleeper). Game days after this post here on their own."},
          {"type": 1, "name": "random", "description": "Post a totally random bet: any team, any player, any stat"},
          {"type": 1, "name": "cancel", "description": "Cancel a bet you posted (mods: any bet) and refund everyone", "options": [

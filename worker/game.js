@@ -13,7 +13,7 @@ import { ITEMS, RARITY, FIRST_CRATE, SLOTS, SLOT_NAMES, BODY_TYPES } from "./ram
 import { lockerUser } from "./auth.js";
 
 export const PICK_POINTS = 10, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50;
-const FIGHT_TTL = 10 * 60_000;   // challenges expire after 10 minutes
+const FIGHT_TTL = 12 * 3600_000;   // challenges stay open 12 hours
 const CSV_URL = "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/data/picks.csv";
 const ESPN = "https://site.api.espn.com/apis/site/v2/sports/football/nfl";
 const APP_ID = "1574684181361852416";
@@ -81,7 +81,9 @@ export class Game extends DurableObject {
       CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
       CREATE TABLE IF NOT EXISTS fights (id INTEGER PRIMARY KEY AUTOINCREMENT, a TEXT, b TEXT, a_name TEXT, b_name TEXT, stake INTEGER,
         status TEXT DEFAULT 'pending', winner TEXT, rounds INTEGER, seed INTEGER, a_look TEXT, b_look TEXT, channel_id TEXT, created INTEGER);`);
-    try { this.sql.exec("ALTER TABLE props ADD COLUMN created_by TEXT"); } catch {}   // who posted each bet (older bets: null)
+    try { this.sql.exec("ALTER TABLE props ADD COLUMN created_by TEXT"); } catch {}
+    try { this.sql.exec("ALTER TABLE fights ADD COLUMN token TEXT"); } catch {}       // to close the challenge message when it expires
+    try { this.sql.exec("ALTER TABLE fights ADD COLUMN msg_id TEXT"); } catch {}   // who posted each bet (older bets: null)
   }
 
   // ---------- live Herd: everyone sees where everyone drives their ram ----------
@@ -532,6 +534,11 @@ export class Game extends DurableObject {
   }
 
   // ---------- fights ----------
+  saveFightToken(id, token) { this.sql.exec("UPDATE fights SET token=? WHERE id=?", token, id); }
+  saveFightMessage(id, channelId, msgId) { this.sql.exec("UPDATE fights SET channel_id=?, msg_id=? WHERE id=?", channelId, msgId, id); }
+  recentFights() {
+    return this.all("SELECT id, a, b, a_name, b_name, stake, status, winner, rounds, created FROM fights ORDER BY id DESC LIMIT 12");
+  }
   challenge(a, aName, b, bName, channelId) {
     if (a === b) return { error: "You can't fight yourself." };
     const u = this.user(a, aName);
@@ -547,9 +554,9 @@ export class Game extends DurableObject {
 
   accept(id, uid, name) {
     const f = this.one("SELECT * FROM fights WHERE id=?", id);
-    if (!f || f.status !== "pending") return { error: "This fight is over." };
+    if (!f || f.status !== "pending") return { error: "This fight is over.", fight: f };
     if (uid !== f.b) return { error: "Only the challenged ram can accept." };
-    if (Date.now() - f.created > FIGHT_TTL) { this.endFight(f, "expired"); return { error: "This challenge expired. Their RUTS went back." }; }
+    if (Date.now() - f.created > FIGHT_TTL) { this.endFight(f, "expired"); return { error: "This challenge expired. Their RUTS went back.", fight: this.fight(id) }; }
     const u = this.user(uid, name);
     if (u.points < f.stake) return { error: `You need **${f.stake} RUTS** to fight. You have **${u.points}**.` };
     this.pay(`fight:${f.id}:${uid}`, uid, -f.stake, `Fight #${f.id} vs ${f.a_name}`);
@@ -567,7 +574,7 @@ export class Game extends DurableObject {
   }
   decline(id, uid) {
     const f = this.one("SELECT * FROM fights WHERE id=?", id);
-    if (!f || f.status !== "pending") return { error: "This fight is over." };
+    if (!f || f.status !== "pending") return { error: "This fight is over.", fight: f };
     if (uid !== f.a && uid !== f.b) return { error: "This isn't your fight." };
     this.endFight(f, uid === f.b ? "declined" : "cancelled");
     return { fight: this.one("SELECT * FROM fights WHERE id=?", id) };
@@ -592,7 +599,16 @@ export class Game extends DurableObject {
     if (!this.ctx.getWebSockets().length) { try { await this.pollMoments(); } catch (e) { console.log("moments", e); } }
     await this.grantOnce("launch50", 50, "Welcome gift");
     try { await this.autoPost(); } catch (e) { console.log("autoPost", e); }
-    for (const f of this.all("SELECT * FROM fights WHERE status='pending' AND created < ?", Date.now() - FIGHT_TTL)) this.endFight(f, "expired");
+    for (const f of this.all("SELECT * FROM fights WHERE status='pending' AND created < ?", Date.now() - FIGHT_TTL)) {
+      this.endFight(f, "expired");
+      // Swap the Accept/Decline buttons for "Nobody showed up". The bot edits its own message; if Discord refuses,
+      // the buttons still fix the message themselves the next time anyone clicks one.
+      const body = JSON.stringify(expiredFight(this.fight(f.id)));
+      const r = f.channel_id && f.msg_id ? await fetch(`https://discord.com/api/v10/channels/${f.channel_id}/messages/${f.msg_id}`, { method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}` }, body }).catch(() => null) : null;
+      if (!r?.ok && f.token) await fetch(`https://discord.com/api/v10/webhooks/${APP_ID}/${f.token}/messages/@original`, { method: "PATCH",
+        headers: { "Content-Type": "application/json" }, body }).catch(() => {});
+    }
     await this.syncPicks();
     const n = await this.resolveProps();
     return n;
@@ -634,6 +650,11 @@ function splitCSV(line) {
   }
   out.push(f);
   return out;
+}
+
+function expiredFight(f) {
+  return { content: "", embeds: [{ title: "🐏  Fight called off", color: 0x6b7280, description: `<@${f.a}> vs <@${f.b}>\nNobody showed up. RUTS returned.` }],
+    components: [], allowed_mentions: { parse: [] } };
 }
 
 export function propMessage(p, count, winners = []) {

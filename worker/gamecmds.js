@@ -118,6 +118,12 @@ export async function gameCommand(i, env, ctx) {
       if (u?.bot) return err("Bots don't have rams.");
       const r = await g.challenge(uid, name, opp, u ? nameOf(u) : "Ram", i.channel_id || i.channel?.id);
       if (r.error) return err(r.error);
+      await g.saveFightToken(r.fight.id, i.token);
+      ctx.waitUntil((async () => {   // remember the message so it can be closed out later
+        await new Promise((res) => setTimeout(res, 1500));
+        const m = await fetch(`https://discord.com/api/v10/webhooks/${i.application_id}/${i.token}/messages/@original`);
+        if (m.ok) { const j = await m.json(); await g.saveFightMessage(r.fight.id, j.channel_id, j.id); }
+      })());
       return { type: 4, data: fightMessage(r.fight) };
     }
 
@@ -125,20 +131,9 @@ export async function gameCommand(i, env, ctx) {
       const sub = i.data.options[0];
       const o = Object.fromEntries((sub.options || []).map((x) => [x.name, x.value]));
       const perms = BigInt(i.member?.permissions || 0), isMod = !!((perms & 8n) || (perms & 32n) || (perms & (1n << 40n)));
-      if (["create", "auto", "random"].includes(sub.name)) {
+      if (["auto", "random"].includes(sub.name)) {
         const wait = await g.propCooldown(uid);
         if (wait) return err(`Slow down: you can post another bet in ${wait}s.`);
-      }
-      if (sub.name === "create") {
-        const r = await g.manualProp({ player: o.player, stat: o.stat, line: o.amount, minutes: o.minutes, channel_id: i.channel_id || i.channel?.id, token: i.token, by: uid });
-        if (r.error) return err(r.error);
-        // grab the posted message's id so results can be edited in later
-        ctx.waitUntil((async () => {
-          await new Promise((s) => setTimeout(s, 1500));
-          const res = await fetch(`https://discord.com/api/v10/webhooks/${i.application_id}/${i.token}/messages/@original`);
-          if (res.ok) { const m = await res.json(); await g.saveMessage(r.prop.id, m.channel_id, m.id); }
-        })());
-        return { type: 4, data: propMessage(r.prop, 0) };
       }
       if (sub.name === "auto" || sub.name === "random") {
         const ch = i.channel_id || i.channel?.id;
@@ -200,7 +195,7 @@ export function fightMessage(f) {
   if (f.status === "pending") return {
     content: `<@${f.b}>`,
     embeds: [{ title: "🐏💥🐏  Ram fight!", color: GOLD,
-      description: `<@${f.a}> challenges <@${f.b}> to butt heads.\n**${f.stake} RUTS** each, winner takes **${pot}**.\nChallenge expires <t:${Math.floor((f.created + 600_000) / 1000)}:R>.` }],
+      description: `<@${f.a}> challenges <@${f.b}> to butt heads.\n**${f.stake} RUTS** each, winner takes **${pot}**.\nChallenge expires <t:${Math.floor((f.created + 12 * 3600_000) / 1000)}:R>.` }],
     components: [{ type: 1, components: [
       { type: 2, style: 3, custom_id: `fight:yes:${f.id}`, label: `Accept (${f.stake} RUTS)`, emoji: { name: "🐏" } },
       { type: 2, style: 4, custom_id: `fight:no:${f.id}`, label: "Decline" }] }],
@@ -222,6 +217,7 @@ export async function gameButton(i, env, ctx) {
   if (id.startsWith("fight:")) {
     const [, act, fid] = id.split(":");
     const r = act === "yes" ? await g.accept(Number(fid), uid, nameOf(me)) : await g.decline(Number(fid), uid);
+    if (r.error && r.fight && r.fight.status !== "pending") return { type: 7, data: fightMessage(r.fight) };   // stale buttons: show how it ended
     if (r.error) return err(r.error);
     return { type: 7, data: fightMessage(r.fight) };   // update the challenge message in place
   }
