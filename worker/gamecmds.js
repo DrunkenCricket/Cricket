@@ -207,7 +207,7 @@ function crateReply(r, uid) {
   ].filter(Boolean);
   const buttons = [];
   if (!r.dupe) buttons.push({ type: 2, style: 1, custom_id: `equip:${it.id}`, label: "Equip it" });
-  buttons.push({ type: 2, style: 2, custom_id: "crate", label: "Open a crate", emoji: { name: "📦" } });
+  buttons.push({ type: 2, style: 2, custom_id: "crate", label: "Open a crate (free if you have one, else 60 RUTS)", emoji: { name: "📦" } });
   buttons.push({ type: 2, style: 5, url: `${SITE}/ram/${uid}`, label: "See the ram" });
   return msg({
     embeds: [{ title: `📦 ${RARITY[it.rarity]?.label || "SECRET"} pull!`, description: lines.join("\n"), color: color(it), image: { url: png(`${SITE}/ram/${uid}/${it.id}~${Date.now()}.svg`) } }],
@@ -248,6 +248,7 @@ export async function gameButton(i, env, ctx) {
     return { type: 7, data: fightMessage(r.fight) };   // update the challenge message in place
   }
   if (id === "crate") return crateReply(await g.openCrate(uid, nameOf(me)), uid);
+  if (id === "opencrate") return crateReply(await g.openCrate(uid, nameOf(me), true), uid);   // only opens a waiting crate, never buys
   if (id.startsWith("equip:")) {
     const r = await g.equip(uid, id.slice(6));
     return r.error ? err(r.error) : msg({ content: `Equipped **${r.item.name}**. [See your ram](${SITE}/ram/${uid})` }, true);

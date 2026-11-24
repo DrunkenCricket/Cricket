@@ -299,9 +299,10 @@ export class Game extends DurableObject {
     }
   }
 
-  openCrate(uid, name) {
+  openCrate(uid, name, freeOnly = false) {
     let u = this.user(uid, name);
     let bought = false;
+    if (u.crates < 1 && freeOnly) return { error: "You don't have a crate waiting. Win bets, top the weekly pick'em, or buy one with **/crate**." };
     if (u.crates < 1) {
       if (u.points < CRATE_COST) return { error: `A crate costs **${CRATE_COST} RUTS**. You have **${u.points}**. Every pick'em vote pays ${VOTE_POINTS}, and right ones pay ${PICK_POINTS} more.` };
       this.sql.exec("UPDATE users SET points = points - ?, crates = crates + 1 WHERE id=?", CRATE_COST, uid);
@@ -571,7 +572,8 @@ export class Game extends DurableObject {
     if (p.status === "hit" && players.length && p.channel_id) {
       await fetch(`https://discord.com/api/v10/channels/${p.channel_id}/messages`, {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}` },
-        body: JSON.stringify({ content: `🎉 **${shown(p.player)}** hit ${p.line}+ ${STATS[p.stat][2]}! ${players.map((u) => `<@${u}>`).join(" ")} each won a crate. Open it with **/crate**.`,
+        body: JSON.stringify({ content: `🎉 **${shown(p.player)}** hit ${p.line}+ ${STATS[p.stat][2]}! ${players.map((u) => `<@${u}>`).join(" ")} each won a crate!`,
+          components: [{ type: 1, components: [{ type: 2, style: 3, custom_id: "opencrate", label: "Open my crate", emoji: { name: "📦" } }] }],
           allowed_mentions: { users: players.slice(0, 100) } }),
       });
     }
