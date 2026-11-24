@@ -2,7 +2,7 @@
 import { ITEMS, RARITY, SLOT_NAMES, BODY_TYPES } from "./ram.js";
 import { lockerToken, lockerUser } from "./auth.js";
 export { lockerToken, lockerUser };
-import { CRATE_COST, PICK_POINTS, PROP_COST, FIGHT_STAKE, STATS, propMessage, shown } from "./game.js";
+import { CRATE_COST, PICK_POINTS, VOTE_POINTS, PODIUM_RUTS, PROP_COST, FIGHT_STAKE, STATS, propMessage, shown } from "./game.js";
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
@@ -35,7 +35,7 @@ export async function gameCommand(i, env, ctx) {
           { name: "Recent", value: w.recent.map((r) => `\`${r.delta >= 0 ? "+" : ""}${r.delta}\` ${r.reason}`).join("\n") || "Nothing yet. Correct picks pay 10 RUTS.", inline: true },
           { name: "Top 10", value: top.map((u, n) => `\`${n + 1}.\` <@${u.id}> ${u.points}`).join("\n") || "-", inline: true },
         ],
-        footer: { text: `+${PICK_POINTS} RUTS per correct pick  •  crate ${CRATE_COST}  •  bets ${PROP_COST}  •  fights ${FIGHT_STAKE}` },
+        footer: { text: `+${VOTE_POINTS} per vote, +${PICK_POINTS} more if right  •  crate ${CRATE_COST}  •  bets ${PROP_COST}  •  fights ${FIGHT_STAKE}` },
       }] });
     }
 
@@ -92,7 +92,7 @@ export async function gameCommand(i, env, ctx) {
         title: "🐏 Herd commands", color: GOLD, url: SITE,
         fields: [
           { name: "🏈 Pick'em", value: [line("/standings", "season leaderboard"), line("/mypicks", "your record and last week's picks")].join("\n") },
-          { name: "💰 RUTS", value: [line("/ruts", "your RUTS, crates and the top 10"), `Correct pick = **${PICK_POINTS} RUTS**. Everyone started with 50.`].join("\n") },
+          { name: "💰 RUTS", value: [line("/ruts", "your RUTS, crates and the top 10"), `Every pick'em vote = **${VOTE_POINTS} RUTS**, right picks **+${PICK_POINTS}** more. Weekly: most correct wins a **crate**, 2nd and 3rd get **${PODIUM_RUTS} RUTS** (ties share).`].join("\n") },
           { name: "🐏 Your ram", value: [line("/crate", `open a crate (first is free, then ${CRATE_COST} RUTS)`), line("/lockeroom", "the website locker: unbox, shop and dress your ram"),
             line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
           { name: "🎲 Bets & fights", value: [line("/prop random", `post a random player bet (entry ${PROP_COST} RUTS, a hit wins a crate)`), line("/prop cancel", "cancel a bet you posted"),

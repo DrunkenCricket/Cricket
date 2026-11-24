@@ -1,6 +1,7 @@
 // Ram game: points, crates, inventory, looks and prop bets, stored in one Durable Object (SQLite).
 //
-// Points:  +10 per correct pick'em pick (from data/picks.csv, Week 12 of 2026 onward).
+// Points:  +5 for every pick'em vote, +10 more when it's right (from data/picks.csv, Week 12 of 2026 onward).
+//          Each finished week: most correct picks wins a crate; 2nd and 3rd place get 20 RUTS. Ties share.
 // Crates:  60 points each. Everyone starts with one free crate, and their first crate is always the Girl Ram.
 //          Duplicates refund points by rarity.
 // Props:   admins post "PLAYER gets N+ STAT". Entry costs 20 points; a hit wins a crate.
@@ -12,7 +13,10 @@ import { DurableObject } from "cloudflare:workers";
 import { ITEMS, RARITY, FIRST_CRATE, SLOTS, SLOT_NAMES, BODY_TYPES } from "./ram.js";
 import { lockerUser } from "./auth.js";
 
-export const PICK_POINTS = 10, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50;
+export const PICK_POINTS = 10, VOTE_POINTS = 5, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50;
+// Weekly accuracy bonus (dense ranking, so ties share a place): 1st place gets a crate, 2nd and 3rd get 20 RUTS.
+export const PODIUM_RUTS = 20;
+const STATE_URL = "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/state/pickem.json";
 const FIGHT_TTL = 12 * 3600_000;   // challenges stay open 12 hours
 const CSV_URL = "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/data/picks.csv";
 const ESPN = "https://site.api.espn.com/apis/site/v2/sports/football/nfl";
@@ -223,13 +227,35 @@ export class Game extends DurableObject {
     if (!res.ok) return 0;
     const [head, ...rows] = (await res.text()).trim().split(/\r?\n/).map(splitCSV);
     let n = 0;
+    const weeks = {};
     for (const vals of rows) {
       const r = Object.fromEntries(head.map((h, i) => [h, vals[i]]));
-      if (r.correct !== "1" || !counts(r)) continue;
+      if (!counts(r)) continue;
       this.user(r.user_id, r.user_name);
-      if (this.pay(`pick:${r.event_id}:${r.user_id}`, r.user_id, PICK_POINTS, `${r.label}: ${r.game}`)) n++;
+      if (this.pay(`vote:${r.event_id}:${r.user_id}`, r.user_id, VOTE_POINTS, `${r.label}: voted ${r.game}`)) n++;
+      if (r.correct === "1" && this.pay(`pick:${r.event_id}:${r.user_id}`, r.user_id, PICK_POINTS, `${r.label}: ${r.game}`)) n++;
+      const wk = (weeks[`${r.season}|${r.label}`] ||= {});
+      wk[r.user_id] = (wk[r.user_id] || 0) + (r.correct === "1" ? 1 : 0);
     }
+    await this.weeklyBonus(weeks);
     return n;
+  }
+
+  /** Podium bonus for each week that's finished (the pick'em has moved on to a newer week). */
+  async weeklyBonus(weeks) {
+    let current = null;
+    try { current = (await (await fetch(STATE_URL, { cf: { cacheTtl: 120 } })).json()).label; } catch { return; }
+    for (const [key, scores] of Object.entries(weeks)) {
+      const [season, label] = key.split("|");
+      if (label === current || this.meta(`podium:${key}`)) continue;
+      const places = [...new Set(Object.values(scores))].sort((a, b) => b - a);   // dense: 14,14,13,12 -> 1st,1st,2nd,3rd
+      for (const [uid, c] of Object.entries(scores)) {
+        const place = places.indexOf(c) + 1;
+        if (place === 1 && this.pay(`podium:${key}:${uid}`, uid, 0, `${label}: most correct (${c}) - bonus crate`)) this.sql.exec("UPDATE users SET crates = crates + 1 WHERE id=?", uid);
+        if (place === 2 || place === 3) this.pay(`podium:${key}:${uid}`, uid, PODIUM_RUTS, `${label}: ${place === 2 ? "2nd" : "3rd"} most correct (${c})`);
+      }
+      this.meta(`podium:${key}`, Date.now());
+    }
   }
 
   // ---------- crates ----------
@@ -247,7 +273,7 @@ export class Game extends DurableObject {
     let u = this.user(uid, name);
     let bought = false;
     if (u.crates < 1) {
-      if (u.points < CRATE_COST) return { error: `A crate costs **${CRATE_COST} RUTS**. You have **${u.points}**. Correct picks pay ${PICK_POINTS} each.` };
+      if (u.points < CRATE_COST) return { error: `A crate costs **${CRATE_COST} RUTS**. You have **${u.points}**. Every pick'em vote pays ${VOTE_POINTS}, and right ones pay ${PICK_POINTS} more.` };
       this.sql.exec("UPDATE users SET points = points - ?, crates = crates + 1 WHERE id=?", CRATE_COST, uid);
       this.sql.exec("INSERT INTO ledger (key,user_id,delta,reason,ts) VALUES (?,?,?,?,?)", `crate:${crypto.randomUUID()}`, uid, -CRATE_COST, "Bought a crate", Date.now());
       bought = true;
