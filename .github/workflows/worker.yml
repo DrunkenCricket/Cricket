@@ -9,9 +9,27 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      HAS_GH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v5
+      # Deploys the code and stores the bot token as a Worker secret (for the website).
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: worker
+          secrets: |
+            DISCORD_BOT_TOKEN
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      # The GitHub token lets the minute timer start jobs on time. Optional.
+      - if: env.HAS_GH_TOKEN == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: worker
+          command: deployments list
+          secrets: |
+            GH_DISPATCH_TOKEN
+        env:
+          GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}

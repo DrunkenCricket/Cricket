@@ -9,6 +9,10 @@ on:
         description: "Preview only (print in the log, don't post)"
         type: boolean
         default: true
+      scheduled:
+        description: "Act like a scheduled run (used by the Cloudflare timer)"
+        type: boolean
+        default: false
       game_date:
         description: "Any date in the game's week, YYYY-MM-DD (blank = this week)"
         type: string
@@ -32,8 +36,8 @@ jobs:
       - run: python gameday.py
         env:
           DISCORD_INJURY_WEBHOOK: ${{ secrets.INJURY_REPORT }}
-          PREVIEW: ${{ github.event_name == 'workflow_dispatch' && inputs.preview }}
-          FORCE: ${{ github.event_name == 'workflow_dispatch' && !inputs.preview }}
+          PREVIEW: ${{ github.event_name == 'workflow_dispatch' && !(inputs.scheduled == true || inputs.scheduled == 'true') && inputs.preview }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && !(inputs.scheduled == true || inputs.scheduled == 'true') && !inputs.preview }}
           GAME_DATE: ${{ inputs.game_date }}
       - name: Save state
         run: |

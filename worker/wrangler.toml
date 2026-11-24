@@ -5,3 +5,7 @@ main = "worker.js"
 compatibility_date = "2025-09-01"
 account_id = "e103cefd2088c2bdf08cc19187b9f225"
 workers_dev = true
+
+# Every minute: start GitHub jobs at the exact time (see timer.js).
+[triggers]
+crons = ["* * * * *"]

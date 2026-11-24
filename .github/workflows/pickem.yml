@@ -8,6 +8,11 @@ on:
     # Monday 11 PM PT (06:00 UTC Tue in PDT, 07:00 UTC Tue in PST): log last week's picks.
     - cron: "0 6,7 * * 2"
   workflow_dispatch:        # manual runs always delete the old polls and post now
+    inputs:
+      scheduled:
+        description: "Act like a scheduled run (used by the Cloudflare timer)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write           # to save state/pickem.json
@@ -28,7 +33,7 @@ jobs:
         env:
           DISCORD_PICKEM_WEBHOOK: ${{ secrets.DISCORD_PICKEM }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          SCHEDULED: ${{ github.event_name == 'schedule' }}
+          SCHEDULED: ${{ github.event_name == 'schedule' || inputs.scheduled == true || inputs.scheduled == 'true' }}
       - name: Save state
         run: |
           git config user.name "github-actions[bot]"

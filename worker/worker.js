@@ -1,4 +1,5 @@
-// Rams Discord slash commands, running on a Cloudflare Worker.
+// Rams bot on a Cloudflare Worker: slash commands, the website (site.js), and the
+// minute timer that starts GitHub jobs on time (timer.js).
 //   /standings          season pick'em leaderboard
 //   /mypicks [user]     your record (or someone else's): rank, weekly results, last week's picks
 //
@@ -11,9 +12,13 @@ const SHEET = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJTclMQ4N5VbwYx0
 const GOLD = 0xffa300;
 const MEDALS = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
 
+import { handleSite } from "./site.js";
+import { runTimer } from "./timer.js";
+
 export default {
-  async fetch(request) {
-    if (request.method !== "POST") return new Response("Rams bot is running.");
+  async fetch(request, env, ctx) {
+    if (request.method === "GET") return handleSite(request, env, ctx);
+    if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
     const body = await request.text();
     if (!(await verify(request, body))) return new Response("Bad signature", { status: 401 });
 
@@ -31,6 +36,11 @@ export default {
       return reply({ content: "Unknown command." }, true);
     }
     return new Response("Unhandled", { status: 400 });
+  },
+
+  // Cloudflare runs this every minute (see wrangler.toml) for exact-time posts.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runTimer(new Date(event.scheduledTime), env));
   },
 };
 
