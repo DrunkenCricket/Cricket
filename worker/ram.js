@@ -628,7 +628,7 @@ export function renderRam(look = {}, size = 512, t = null) {
     </g>
     ${gear?.front || ""}`;
 
-  const bg = I("bg")?.svg || solid("#1b2440", "#243258");
+  const bg = look.bg === "none" ? "" : I("bg")?.svg || solid("#1b2440", "#243258");
   const shadow = `<ellipse cx="256" cy="488" rx="160" ry="18" fill="#000" opacity=".25"/>`;
   let filters = "", body2 = `${shadow}${ram}`;
   if (finish === "flat") body2 = body2.replace(new RegExp(`stroke="${OUT}" stroke-width="(9|6)"`, "g"), 'stroke="none" stroke-width="0"');

@@ -285,6 +285,7 @@ export class Game extends DurableObject {
     const rank = this.one("SELECT COUNT(*) AS n FROM users WHERE points > ?", u.points).n + 1;
     return { user: u, recent, rank, items: this.owned(uid).size };
   }
+  herd() { return this.all("SELECT id, name, points FROM users"); }
   leaders() { return this.all("SELECT id, name, points FROM users ORDER BY points DESC LIMIT 10"); }
   inventory(uid) {
     return this.all("SELECT item_id FROM items WHERE user_id=? ORDER BY ts", uid).map((r) => pub(ITEMS[r.item_id])).filter(Boolean);

@@ -180,18 +180,32 @@ async function historyData(env, ctx) {
 
 // ---------- routes ----------
 
+// Everyone with a ram, plus everyone who has made a pick (they get the default ram until they open a crate).
+async function herdData(env, ctx) {
+  const hist = await historyData(env, ctx);
+  const herd = new Map(hist.standings.map((p) => [p.id, { id: p.id, name: p.name, avatar: p.avatar, points: 0 }]));
+  if (env.GAME) {
+    for (const u of await env.GAME.get(env.GAME.idFromName("main")).herd()) {
+      herd.set(u.id, { ...(herd.get(u.id) || { avatar: avatarUrl(u.id, null) }), id: u.id, name: u.name || herd.get(u.id)?.name || "Ram", points: u.points });
+    }
+  }
+  return { rams: [...herd.values()] };
+}
+
 export async function handleSite(request, env, ctx) {
   const { pathname } = new URL(request.url);
   try {
     if (pathname === "/api/week") return json(await weekData(env, ctx), 60);
     if (pathname === "/api/history") return json(await historyData(env, ctx), 120);
+    if (pathname === "/api/herd") return json(await herdData(env, ctx), 60);
   } catch (e) {
     return json({ error: String(e.message || e) }, 10);
   }
   const ram = pathname.match(/^\/ram\/(\d{5,25})(\.svg)?$/);
   if (ram && env.GAME) {
     const r = await env.GAME.get(env.GAME.idFromName("main")).look(ram[1]);
-    const look = r?.look || {};
+    const look = { ...(r?.look || {}) };
+    if (new URL(request.url).searchParams.has("bare")) look.bg = "none";   // for the Herd pasture
     const svg = renderRam(look, 512, "css");
     if (ram[2]) return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=30" } });
     return new Response(ramPage(r?.name || "Ram", svg, look), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=30" } });
@@ -265,6 +279,17 @@ td.n{font-variant-numeric:tabular-nums}
 .who{display:flex;align-items:center;gap:10px}.who img{width:30px;height:30px;border-radius:50%}
 .pct{display:flex;align-items:center;gap:8px}.pct span{height:6px;background:var(--gold);border-radius:3px}
 .empty{color:var(--muted);padding:40px;text-align:center}
+.pasture{position:relative;height:560px;border-radius:18px;overflow:hidden;border:1px solid var(--line);
+  background:radial-gradient(ellipse 60% 30% at 20% 34%,#3f9a4a 0 99%,transparent 100%),radial-gradient(ellipse 70% 32% at 85% 36%,#358a40 0 99%,transparent 100%),
+  linear-gradient(#6fb6ff 0,#a9d8ff 30%,#4caf50 30.2%,#2e7d32 100%)}
+.sun{position:absolute;right:8%;top:6%;width:70px;height:70px;border-radius:50%;background:#ffe27a;box-shadow:0 0 40px #ffe27a}
+.fence{position:absolute;left:0;right:0;top:31%;height:26px;background:repeating-linear-gradient(90deg,#8a5a3c 0 8px,transparent 8px 60px),linear-gradient(transparent 6px,#a8703f 6px 11px,transparent 11px 17px,#a8703f 17px 22px,transparent 22px)}
+.rw{position:absolute;width:150px;margin-left:-75px;margin-top:-150px;text-align:center;cursor:pointer;text-decoration:none;color:#fff}
+.rw img{width:150px;height:150px;display:block;transition:transform .25s}
+.rw span{display:inline-block;margin-top:-14px;background:rgba(0,0,0,.6);padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap}
+.rw span b{color:var(--gold);font-weight:700;margin-left:4px}
+.rw:hover span{background:var(--gold);color:#111}.rw:hover span b{color:#111}
+@media (max-width:560px){.pasture{height:460px}.rw,.rw img{width:110px}.rw{margin-left:-55px;margin-top:-110px}.rw img{height:110px}}
 @media (max-width:560px){.grid{grid-template-columns:1fr}h1{font-size:22px}nav button{padding:10px 10px}}
 </style>
 </head>
@@ -272,13 +297,13 @@ td.n{font-variant-numeric:tabular-nums}
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button></nav>
+<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="herd">Herd</button></nav>
 </div></header>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const view = document.getElementById("view"), sub = document.getElementById("sub");
-let week = null, hist = null, tab = "week";
+let week = null, hist = null, herd = null, tab = "week", raf = 0;
 const when = (iso) => new Date(iso).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"});
 
 function faces(users) {
@@ -301,8 +326,48 @@ function card(g, result) {
     + '<div class="vs">' + side(a, total, result) + '<div class="at">@</div>' + side(h, total, result) + '</div>'
     + '<div class="bar"><i style="width:' + ap + '%"></i><b style="width:' + (100 - ap) + '%"></b></div></div>';
 }
+// Herd: every ram wanders the pasture, pauses, wanders again. Lower on screen = closer = bigger.
+function pasture() {
+  if (!herd) { view.innerHTML = '<div class="empty">Rounding up the herd...</div>'; return; }
+  sub.textContent = herd.rams.length + " rams in the pasture";
+  if (!herd.rams.length) { view.innerHTML = '<div class="empty">No rams yet. Open your first crate with /crate in Discord.</div>'; return; }
+  view.innerHTML = '<p class="note">Click a ram to see its gear. Get your own with /crate in Discord.</p><div class="pasture" id="pa"><div class="sun"></div><div class="fence"></div></div>';
+  const pa = document.getElementById("pa"), still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const sheep = herd.rams.map((r) => {
+    const el = document.createElement("a");
+    el.className = "rw"; el.href = "/ram/" + r.id;
+    el.innerHTML = '<img src="/ram/' + r.id + '.svg?bare" alt=""><span>' + esc(r.name) + (r.points ? '<b>' + r.points + '</b>' : "") + '</span>';
+    pa.appendChild(el);
+    return { el, img: el.firstChild, x: rnd(8, 92), y: rnd(48, 96), tx: 0, ty: 0, wait: rnd(0, 3) };
+  });
+  sheep.forEach((s) => { s.tx = s.x; s.ty = s.y; });
+  let last = performance.now();
+  function step(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    for (const s of sheep) {
+      if (!still) {
+        if (s.wait > 0) s.wait -= dt;
+        else {
+          const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
+          if (d < 0.5) { s.wait = rnd(1.5, 5); s.tx = Math.max(6, Math.min(94, s.x + rnd(-30, 30))); s.ty = rnd(48, 96); }
+          else { const v = 4 * dt / d; s.x += dx * v; s.y += dy * v * 0.6; }
+        }
+      }
+      const k = 0.62 + (s.y - 48) / 48 * 0.5;
+      s.el.style.left = s.x + "%"; s.el.style.top = s.y + "%";
+      s.el.style.transform = "scale(" + k.toFixed(3) + ")"; s.el.style.transformOrigin = "50% 100%";
+      s.el.style.zIndex = Math.round(s.y * 10);
+    }
+    raf = requestAnimationFrame(step);
+  }
+  raf = requestAnimationFrame(step);
+}
+
 function render() {
+  cancelAnimationFrame(raf);
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
+  if (tab === "herd") { pasture(); return; }
   if (tab === "week") {
     if (!week) return;
     if (week.error) { view.innerHTML = '<div class="empty">Couldn\\'t load this week: ' + esc(week.error) + '</div>'; return; }
@@ -326,9 +391,12 @@ function render() {
       + '</tbody></table>';
   }
 }
-document.querySelectorAll("nav button").forEach((b) => b.onclick = () => { tab = b.dataset.t; render(); });
-fetch("/api/week").then((r) => r.json()).then((d) => { week = d; render(); }).catch((e) => { week = {error: e.message}; render(); });
-fetch("/api/history").then((r) => r.json()).then((d) => { hist = d; render(); }).catch(() => {});
+document.querySelectorAll("nav button").forEach((b) => b.onclick = () => { tab = b.dataset.t; history.replaceState(null, "", "#" + tab); render(); });
+if (["week", "last", "table", "herd"].includes(location.hash.slice(1))) tab = location.hash.slice(1);
+fetch("/api/week").then((r) => r.json()).then((d) => { week = d; if (tab === "week") render(); }).catch((e) => { week = {error: e.message}; render(); });
+render();
+fetch("/api/history").then((r) => r.json()).then((d) => { hist = d; if (tab === "last" || tab === "table") render(); }).catch(() => {});
+fetch("/api/herd").then((r) => r.json()).then((d) => { herd = d; if (tab === "herd") render(); }).catch(() => { herd = { rams: [] }; });
 </script>
 </body>
 </html>`;
