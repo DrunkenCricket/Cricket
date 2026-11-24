@@ -381,7 +381,7 @@ for (const [k, n, r, svg] of FEET) item(`feet_${k}`, n, "feet", r, { svg });
 // ---------- GEAR (~30): body-attached, may depend on body shape ----------
 const pads = (c, trim) => (b) => b.shoulders.map(([x, y], i) => {
   const s = i ? -1 : 1;
-  return `<path d="M ${x + 40 * s} ${y - 6} C ${x} ${y - 30}, ${x - 40 * s} ${y - 10}, ${x - 44 * s} ${y + 26} C ${x - 20 * s} ${y + 20}, ${x + 20 * s} ${y + 20}, ${x + 40 * s} ${y + 20} Z" fill="${c}" ${S}/>${trim ? `<path d="M ${x - 30 * s} ${y + 4} q ${30 * s} -14 ${60 * s} -4" stroke="${trim}" stroke-width="5" fill="none"/>` : ""}`;
+  return `<path d="M ${x + 40 * s} ${y - 14} C ${x} ${y - 38}, ${x - 40 * s} ${y - 18}, ${x - 44 * s} ${y + 18} C ${x - 20 * s} ${y + 12}, ${x + 20 * s} ${y + 12}, ${x + 40 * s} ${y + 12} Z" fill="${c}" ${S}/>${trim ? `<path d="M ${x - 30 * s} ${y - 4} q ${30 * s} -14 ${60 * s} -4" stroke="${trim}" stroke-width="5" fill="none"/>` : ""}`;
 }).join("");
 const gloves = (c) => (b) => [b.handL, b.handR].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${b.arm * 0.7 + 6}" fill="${c}" ${S}/>`).join("");
 const bands = (c) => (b) => [b.handL, b.handR].map(([x, y]) => `<rect x="${x - b.arm / 2 - 4}" y="${y - 30}" width="${b.arm + 8}" height="12" rx="4" fill="${c}" ${S6}/>`).join("");
@@ -510,6 +510,19 @@ export const SLOT_NAMES = { base: "Base", pose: "Pose", bg: "Background", fleece
 // ---------- render ----------
 const HEAD_T = "translate(256,186) scale(.78) translate(-256,-250)";
 const TUFT = [[220, 152, 28], [256, 140, 32], [292, 152, 28], [238, 172, 24], [274, 172, 24], [200, 172, 18], [312, 172, 18]];
+// Body-aware girl details: they scale with the body width and sit at the body's chest line.
+const bodyW = (b) => (b.shoulders[1][0] - b.shoulders[0][0]) / 160;
+const bust = (b) => `<g transform="translate(256 ${b.chest[1] - 360}) scale(${bodyW(b).toFixed(3)} 1) translate(-256 0)">${GIRL_BUST}</g>`;
+/** Sports bra cut from the torso's own outline, so it wraps whatever body it's on. */
+function sportsBra(b, id) {
+  const top = b.chest[1] - 36, bot = b.chest[1] + 20, w = bodyW(b), cx = 256;
+  const band = `M 0 ${top + 10} Q ${cx} ${top - 6} 512 ${top + 10} L 512 ${bot} Q ${cx} ${bot + 10} 0 ${bot} Z`;
+  return `<clipPath id="${id}b"><path d="${b.torso}"/></clipPath>
+    <g clip-path="url(#${id}b)"><path d="${band}" fill="#ff6fae"/><path d="${band}" fill="none" stroke="${OUT}" stroke-width="7"/>
+    <path d="M 0 ${bot - 7} Q ${cx} ${bot + 3} 512 ${bot - 7}" stroke="#d94a8c" stroke-width="5" fill="none"/></g>
+    ${[-1, 1].map((sd) => `<path d="M ${cx + sd * 40 * w} ${top + 2} L ${cx + sd * 50 * w} ${b.shoulders[0][1] - 18}" stroke="${OUT}" stroke-width="13" stroke-linecap="round"/><path d="M ${cx + sd * 40 * w} ${top + 2} L ${cx + sd * 50 * w} ${b.shoulders[0][1] - 18}" stroke="#ff6fae" stroke-width="6" stroke-linecap="round"/>`).join("")}
+    ${bust(b)}`;
+}
 const GIRL_BUST = `<path d="M 206 346 C 214 372, 246 372, 254 352 M 258 352 C 266 372, 298 372, 306 346" fill="none" stroke="${OUT}" stroke-width="6" stroke-linecap="round" opacity=".75"/>
   <ellipse cx="228" cy="344" rx="22" ry="14" fill="#fff" opacity=".12"/><ellipse cx="284" cy="344" rx="22" ry="14" fill="#fff" opacity=".12"/>`;
 
@@ -595,15 +608,15 @@ export function renderRam(look = {}, size = 512, t = null) {
         <g clip-path="url(#${id}t)"><rect width="512" height="512" fill="${design.fill}"/>${design.pattern || ""}</g>
         <path d="${tk}" fill="none" stroke="${OUT}" stroke-width="7" stroke-linejoin="round"/></g>
       ${design.deco ? design.deco(decoBody) : ""}
-      ${girl ? GIRL_BUST : ""}<path d="${body.torso}" fill="none" ${S}/>`;
+      ${girl ? bust(body) : ""}<path d="${body.torso}" fill="none" ${S}/>`;
   } else if (design) {
     torso = `<clipPath id="${id}"><path d="${body.torso}"/></clipPath><path d="${body.torso}" fill="${design.fill}"/>
       <g clip-path="url(#${id})">${design.pattern || ""}</g>${design.deco ? design.deco(decoBody) : ""}
-      ${girl ? GIRL_BUST : ""}<path d="${body.torso}" fill="none" ${S}/>
+      ${girl ? bust(body) : ""}<path d="${body.torso}" fill="none" ${S}/>
       <path d="M 228 302 L 256 330 L 284 302" fill="${design.collar}" ${S}/>`;
   } else {
     torso = `<path d="${body.torso}" fill="${fleece}" ${S}/>${body.skin || ""}`;
-    if (girl) torso += `<path d="M 200 330 C 214 312, 298 312, 312 330 L 312 372 C 290 384, 222 384, 200 372 Z" fill="#ff6fae" ${S}/>${GIRL_BUST}`;  // sports bra
+    if (girl) torso += sportsBra(body, id);
   }
   const skinVisible = !design || cut === "tank";
   const tattoo = I("tattoo") && skinVisible ? I("tattoo").fn(body) : "";
@@ -640,7 +653,7 @@ export function renderRam(look = {}, size = 512, t = null) {
   const armL = `${armBase(body.armL)}${sleeve(body.armL, body.upperL)}`, armR = `${armBase(body.armR)}${sleeve(body.armR, body.upperR)}`;
   // raised arms go in front of the head and horns so they read
   const upper = `${body.upL ? `<g ${gArmL}>${armL}${hL}${onHand("L")}</g>` : ""}${body.upR ? `<g ${gArmR}>${armR}${hR}${onHand("R")}${held}</g>` : ""}`;
-  let ram = `${gear?.behind || ""}${neck?.behind || ""}
+  let ram = `${gear?.behind || ""}${neck?.behind ? `<g transform="translate(256 0) scale(${bodyW(body).toFixed(3)} 1) translate(-256 0)">${neck.behind}</g>` : ""}
     ${legs}${feet}
     <g ${gBob}>
       ${body.upL ? "" : `<g ${gArmL}>${armL}</g>`}${body.upR ? "" : `<g ${gArmR}>${armR}</g>`}
@@ -649,7 +662,7 @@ export function renderRam(look = {}, size = 512, t = null) {
       ${body.upL ? "" : `<g ${gArmL}>${hL}${onHand("L")}</g>`}
       ${body.upR ? "" : `<g ${gArmR}>${hR}${onHand("R")}${held}</g>`}
       <g ${gHead}>${head}</g>
-      ${neck?.svg || ""}
+      ${neck?.svg ? `<g transform="translate(256 0) scale(${bodyW(body).toFixed(3)} 1) translate(-256 0)">${neck.svg}</g>` : ""}
       ${upper}
     </g>
     ${gear?.front || ""}`;
