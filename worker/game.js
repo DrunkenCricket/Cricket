@@ -695,7 +695,8 @@ export class Game extends DurableObject {
   }
   locker(uid) {
     const u = this.one("SELECT * FROM users WHERE id=?", uid) || this.user(uid);
-    return { name: u.name, points: u.points, crates: u.crates, opened: u.opened, look: JSON.parse(u.look), items: this.inventory(uid) };
+    const history = this.all("SELECT delta, reason, ts FROM ledger WHERE user_id=? ORDER BY ts DESC LIMIT 25", uid);
+    return { name: u.name, points: u.points, crates: u.crates, opened: u.opened, look: JSON.parse(u.look), items: this.inventory(uid), history };
   }
   /** Open bets, plus anything settled in the last week, with who's in. */
   bets() {

@@ -235,6 +235,8 @@ export async function handleSite(request, env, ctx) {
     if (pathname === "/api/history") return json(await historyData(env, ctx), 120);
     if (pathname === "/api/herd") return json(await herdData(env, ctx), 60);
     if (pathname === "/api/bets") return json(await betsData(env, ctx), 30);
+    const pm = pathname.match(/^\/api\/player\/(\d{5,25})$/);   // public game stats: RUTS, crates, history
+    if (pm && env.GAME) { const l = await env.GAME.get(env.GAME.idFromName("main")).locker(pm[1]); delete l.look; return json(l, 15); }
   } catch (e) {
     return json({ error: String(e.message || e) }, 10);
   }
