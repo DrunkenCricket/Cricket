@@ -229,6 +229,7 @@ async function betsData(env, ctx) {
 export async function handleSite(request, env, ctx) {
   const { pathname } = new URL(request.url);
   if (pathname === "/api/locker" && request.method === "POST" && env.GAME) return lockerApi(request, env);
+  if (pathname === "/robots.txt") return new Response("User-agent: *\nDisallow: /lockeroom\nDisallow: /locker\n", { headers: { "Content-Type": "text/plain" } });
   if (pathname === "/locker" || pathname === "/lockeroom") return new Response(lockerPage(), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
   try {
     if (pathname === "/api/week") return json(await weekData(env, ctx), 60);
