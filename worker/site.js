@@ -620,7 +620,10 @@ ${FIELD_CSS}
 .rw img{width:150px;height:150px;display:block;transition:transform .25s}
 .rw span{display:inline-block;margin-top:-14px;background:rgba(0,0,0,.6);padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap}
 .rw span b{color:var(--gold);font-weight:700;margin-left:4px}
-.rw:hover span{background:var(--gold);color:#111}.rw:hover span b{color:#111}
+.rw:hover span{background:var(--gold);color:#111}
+.rw.me{cursor:default}.rw.me span{background:var(--gold);color:#111;box-shadow:0 0 0 2px #111}.rw.me span b{color:#111}
+.rw.me img{filter:drop-shadow(0 0 10px rgba(255,200,44,.9))}.pasture.field{cursor:crosshair}
+.note b{color:var(--gold)}.rw:hover span b{color:#111}
 @media (max-width:560px){.pasture{height:460px}.rw,.rw img{width:110px}.rw{margin-left:-55px;margin-top:-110px}.rw img{height:110px}}
 @media (max-width:560px){.grid{grid-template-columns:1fr}h1{font-size:22px}nav button{padding:10px 10px}}
 </style>
@@ -659,40 +662,71 @@ function card(g, result) {
     + '<div class="vs">' + side(a, total, result) + '<div class="at">@</div>' + side(h, total, result) + '</div>'
     + '<div class="bar"><i style="width:' + ap + '%"></i><b style="width:' + (100 - ap) + '%"></b></div></div>';
 }
-// Herd: every ram wanders the pasture, pauses, wanders again. Lower on screen = closer = bigger.
+// Herd: every ram roams the field. If this browser holds a Lockeroom key, that person's ram is theirs to drive:
+// click or tap anywhere on the field to walk there, or hold the arrow keys / WASD.
+const keys = {};
+addEventListener("keydown", (e) => { if (tab === "herd" && /^(Arrow|[wasd]$)/i.test(e.key)) { keys[e.key.toLowerCase()] = true; e.preventDefault(); } });
+addEventListener("keyup", (e) => { delete keys[e.key.toLowerCase()]; });
+function myId() {
+  try { const t = localStorage.getItem("lr_t"); if (t && Number(t.split(".")[1]) * 1000 > Date.now()) return t.split(".")[0]; } catch {}
+  return null;
+}
 function pasture() {
   if (!herd) { view.innerHTML = '<div class="empty">Rounding up the herd...</div>'; return; }
+  const me = myId(), mine = herd.rams.some((r) => r.id === me);
   sub.textContent = herd.rams.length + " rams on the field";
   if (!herd.rams.length) { view.innerHTML = '<div class="empty">No rams yet. Open your first crate with /crate in Discord.</div>'; return; }
-  view.innerHTML = '<p class="note">Click a ram to see its gear. Get your own with /crate in Discord, or settle it with /fight.</p><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML + '</div>';
+  const note = mine ? "<b>Your ram has the gold tag.</b> Click anywhere on the field to walk there, or use the arrow keys / WASD."
+    : "Click a ram to see its gear. Want to drive your own? Run <b>/lockeroom</b> in Discord, open the link once, then come back here.";
+  view.innerHTML = '<p class="note">' + note + '</p><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML + '</div>';
   // Windows/Mac "reduce motion" settings only tone this down (no trotting bounce, no sprints); the rams still roam.
   const pa = document.getElementById("pa"), calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const rnd = (a, b) => a + Math.random() * (b - a);
+  const clampX = (x) => Math.max(12, Math.min(88, x)), clampY = (y) => Math.max(24, Math.min(96, y));
+  let you = null;
   const sheep = herd.rams.map((r) => {
-    const el = document.createElement("a");
-    el.className = "rw"; el.href = "/ram/" + r.id;
-    el.innerHTML = '<img src="/ram/' + r.id + '.svg?bare" alt=""><span>' + esc(r.name) + (r.points ? '<b>' + r.points + ' RUTS</b>' : "") + '</span>';
+    const isMe = r.id === me;
+    const el = document.createElement(isMe ? "div" : "a");
+    el.className = "rw" + (isMe ? " me" : ""); if (!isMe) el.href = "/ram/" + r.id;
+    el.innerHTML = '<img src="/ram/' + r.id + '.svg?bare" alt=""><span>' + (isMe ? "YOU · " : "") + esc(r.name) + (r.points ? '<b>' + r.points + ' RUTS</b>' : "") + '</span>';
     pa.appendChild(el);
-    return { el, img: el.firstChild, x: rnd(14, 86), y: rnd(24, 96), tx: 0, ty: 0, wait: rnd(0, 0.8), speed: rnd(2.5, 4), t: rnd(0, 6) };
+    const s = { el, img: el.firstChild, me: isMe, x: rnd(14, 86), y: rnd(24, 96), tx: 0, ty: 0, wait: rnd(0, 0.8), speed: rnd(2.5, 4), t: rnd(0, 6) };
+    if (isMe) { you = s; s.x = 50; s.y = 70; s.wait = 0; s.speed = 9; }
+    return s;
   });
   sheep.forEach((s) => { s.tx = s.x; s.ty = s.y; });
+  if (you) pa.addEventListener("click", (e) => {
+    if (e.target.closest("a")) return;                    // clicking another ram opens its page
+    const b = pa.getBoundingClientRect();
+    you.tx = clampX((e.clientX - b.left) / b.width * 100);
+    you.ty = clampY((e.clientY - b.top) / b.height * 100 + 6);   // feet land where you click
+    you.wait = 0;
+  });
   let last = performance.now();
   function step(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     for (const s of sheep) {
-      {
-        if (s.wait > 0) s.wait -= dt;
+      let moving = false;
+      if (s.me) {
+        const kx = (keys.arrowright || keys.d ? 1 : 0) - (keys.arrowleft || keys.a ? 1 : 0);
+        const ky = (keys.arrowdown || keys.s ? 1 : 0) - (keys.arrowup || keys.w ? 1 : 0);
+        if (kx || ky) { s.x = clampX(s.x + kx * 14 * dt); s.y = clampY(s.y + ky * 14 * dt); s.tx = s.x; s.ty = s.y; moving = true; }
         else {
           const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
-          if (d < 0.5) {   // arrived: short breather, then a new spot anywhere on the field (sometimes a sprint)
-            s.wait = Math.random() < .3 ? rnd(2, 4) : rnd(0.5, 1.5);
-            s.tx = rnd(14, 86); s.ty = rnd(24, 96); s.speed = !calm && Math.random() < .15 ? rnd(6, 8) : rnd(2.5, 4);
-          } else { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; s.t += dt * (4 + s.speed * 0.8); }
+          if (d > 0.3) { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; moving = true; }
         }
+        if (moving) s.t += dt * 10;
+      } else if (s.wait > 0) s.wait -= dt;
+      else {
+        const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
+        if (d < 0.5) {   // arrived: short breather, then a new spot anywhere on the field (sometimes a jog)
+          s.wait = Math.random() < .3 ? rnd(2, 4) : rnd(0.5, 1.5);
+          s.tx = rnd(14, 86); s.ty = rnd(24, 96); s.speed = !calm && Math.random() < .15 ? rnd(6, 8) : rnd(2.5, 4);
+        } else { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; s.t += dt * (4 + s.speed * 0.8); moving = true; }
       }
       const k = 0.6 + (s.y - 24) / 72 * 0.5;
       s.el.style.left = s.x + "%"; s.el.style.top = s.y + "%";
-      const hop = s.wait > 0 || calm ? 0 : -Math.abs(Math.sin(s.t)) * 6;   // trotting bounce while moving
+      const hop = !moving || calm ? 0 : -Math.abs(Math.sin(s.t)) * 6;   // trotting bounce while moving
       s.el.style.transform = "translateY(" + hop.toFixed(1) + "px) scale(" + k.toFixed(3) + ")"; s.el.style.transformOrigin = "50% 100%";
       s.el.style.zIndex = Math.round(s.y * 10);
     }
