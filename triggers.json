@@ -1,0 +1,20 @@
+[
+  {
+    "name": "witherspoon",
+    "match": ["witherspoon", "ahkello"],
+    "strict": true,
+    "delete": true,
+    "timeout_seconds": 60,
+    "reply": "we do not use that name here"
+  },
+  {
+    "name": "whose house",
+    "match": ["whose house"],
+    "reply": "RAMS HOUSE 🐏"
+  },
+  {
+    "name": "go rams",
+    "match": ["go rams"],
+    "react": "🐏"
+  }
+]
