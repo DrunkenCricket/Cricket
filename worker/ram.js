@@ -139,17 +139,19 @@ const SHIRT_DESIGNS = [
   ["whose", "WHOSE HOUSE Tee", "rare", { fill: BLUE, collar: BLUE, deco: (b) => txt("WHOSE", b.chest[0], b.chest[1] + 2, 26, GOLD) + txt("HOUSE", b.chest[0], b.chest[1] + 30, 26, GOLD) }],
   ["ramshouse", "RAMS HOUSE Tee", "rare", { fill: GOLD, collar: GOLD, deco: (b) => txt("RAMS", b.chest[0], b.chest[1] + 2, 28, BLUE) + txt("HOUSE", b.chest[0], b.chest[1] + 30, 26, BLUE) }],
   ["icon", "Ram Head Tee", "common", { fill: "#2b2b33", collar: "#2b2b33", deco: (b) => RAM_ICON(b.chest[0], b.chest[1], 0.8, GOLD) }],
-  ["flamingo", "Flamingo Shirt", "epic", { fill: "#7fd6c9", collar: "#5fb8ab", pattern: flamingos }],
+  ["flamingo", "Flamingo Shirt", "rare",{ fill: "#7fd6c9", collar: "#5fb8ab", pattern: flamingos }],
   ["referee", "Referee Stripes", "rare", { fill: "#fff", collar: "#111", pattern: vstripes("#111", 14), sleeve: "#111" }],
   ["camo", "Camo Tee", "epic", { fill: "#6b7d4a", collar: "#3f4d2a", pattern: `<rect width="512" height="512" fill="url(#fp_camo)"/>`, defs: FLEECE_PATTERNS[3][3] }],
   ["goat", "GOAT Tee", "legendary", { fill: "#111", collar: GOLD, deco: (b) => txt("GOAT", b.chest[0], b.chest[1] + 18, 40, GOLD) + `<circle cx="${b.chest[0] + 46}" cy="${b.chest[1] - 22}" r="8" fill="#fff"/>` }],
 ];
-const CUTS = [["tank", "Tank"], ["tee", "Tee"], ["long", "Long Sleeve"]];
+// Every design comes in tank, short sleeve and long sleeve.
+const CUTS = [["tank", "Tank"], ["tee", "Short Sleeve"], ["long", "Long Sleeve"]];
+// Per-cut rarity overrides: all flamingos are rare, the flamingo tank is the rarest shirt.
+const CUT_RARITY = { flamingo: { tank: "mythic", tee: "rare", long: "rare" } };
 for (const [dk, dname, rarity, d] of SHIRT_DESIGNS) {
   for (const [ck, cname] of CUTS) {
     const base = dname.replace(/ (Tee|Jersey|Shirt)$/, "");
-    const label = ck === "tee" ? dname : `${base} ${cname}`;
-    item(`shirt_${dk}_${ck}`, label, "shirt", rarity, { design: d, cut: ck });
+    item(`shirt_${dk}_${ck}`, `${base} ${cname}`, "shirt", CUT_RARITY[dk]?.[ck] || rarity, { design: d, cut: ck });
   }
 }
 
