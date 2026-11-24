@@ -41,9 +41,11 @@ COMMANDS = [
              {"type": 3, "name": "stat", "description": "Stat", "required": True, "choices": [
                  {"name": n, "value": v} for v, n in [("rec_yds", "Receiving yards"), ("receptions", "Catches"), ("rec_td", "Receiving TDs"),
                  ("rush_yds", "Rushing yards"), ("rush_td", "Rushing TDs"), ("pass_yds", "Passing yards"), ("pass_td", "Passing TDs"),
-                 ("tackles", "Tackles"), ("sacks", "Sacks")]]},
+                 ("any_td", "Anytime TD"), ("tackles", "Tackles"), ("sacks", "Sacks")]]},
              {"type": 10, "name": "amount", "description": "They need this many or more", "required": True, "min_value": 0.5},
              {"type": 4, "name": "minutes", "description": "Close entries in N minutes (default: at kickoff)", "required": False, "min_value": 1, "max_value": 240}]},
+         {"type": 1, "name": "auto", "description": "Post this week's Rams bets (lines from Sleeper). Game days after this post here on their own."},
+         {"type": 1, "name": "random", "description": "Post a totally random bet: any team, any player, any stat"},
          {"type": 1, "name": "cancel", "description": "Cancel a bet and refund everyone", "options": [
              {"type": 4, "name": "id", "description": "Bet number", "required": True}]},
          {"type": 1, "name": "check", "description": "Check ESPN now and settle any finished bets"}]},

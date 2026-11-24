@@ -667,6 +667,8 @@ function card(g, result) {
 const keys = {};
 addEventListener("keydown", (e) => { if (tab === "herd" && /^(Arrow|[wasd]$)/i.test(e.key)) { keys[e.key.toLowerCase()] = true; e.preventDefault(); } });
 addEventListener("keyup", (e) => { delete keys[e.key.toLowerCase()]; });
+let sock = null;
+function myKey() { try { const t = localStorage.getItem("lr_t"); if (t && Number(t.split(".")[1]) * 1000 > Date.now()) return t; } catch {} return null; }
 function myId() {
   try { const t = localStorage.getItem("lr_t"); if (t && Number(t.split(".")[1]) * 1000 > Date.now()) return t.split(".")[0]; } catch {}
   return null;
@@ -676,7 +678,7 @@ function pasture() {
   const me = myId(), mine = herd.rams.some((r) => r.id === me);
   sub.textContent = herd.rams.length + " rams on the field";
   if (!herd.rams.length) { view.innerHTML = '<div class="empty">No rams yet. Open your first crate with /crate in Discord.</div>'; return; }
-  const note = mine ? "<b>Your ram has the gold tag.</b> Click anywhere on the field to walk there, or use the arrow keys / WASD."
+  const note = mine ? "<b>Your ram has the gold tag.</b> Click anywhere on the field to walk there, or use the arrow keys / WASD. Everyone watching sees you move."
     : "Click a ram to see its gear. Want to drive your own? Run <b>/lockeroom</b> in Discord, open the link once, then come back here.";
   view.innerHTML = '<p class="note">' + note + '</p><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML + '</div>';
   // Windows/Mac "reduce motion" settings only tone this down (no trotting bounce, no sprints); the rams still roam.
@@ -695,12 +697,23 @@ function pasture() {
     return s;
   });
   sheep.forEach((s) => { s.tx = s.x; s.ty = s.y; });
+  const byId = Object.fromEntries(sheep.map((s, i) => [herd.rams[i].id, s]));
+  // Live: other players' moves arrive over a websocket; their rams walk where they clicked.
+  const drive = (id, x, y, snap) => { const s = byId[id]; if (!s || s.me) return; s.remote = Date.now(); s.tx = x; s.ty = y; s.speed = 9; s.wait = 0; if (snap) { s.x = x; s.y = y; } };
+  try { if (sock) sock.close(); } catch {}
+  sock = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/herd");
+  sock.onopen = () => { const k = myKey(); if (k) sock.send(JSON.stringify({ t: "hello", k })); };
+  sock.onmessage = (e) => { const m = JSON.parse(e.data);
+    if (m.t === "snap") for (const [id, p] of Object.entries(m.pos)) { if (byId[id]?.me) { you.x = you.tx = p.x; you.y = you.ty = p.y; } else drive(id, p.x, p.y, true); }
+    if (m.t === "go") drive(m.id, m.x, m.y); };
+  let lastSent = 0;
+  const send = (x, y) => { if (sock && sock.readyState === 1 && you) sock.send(JSON.stringify({ t: "go", x: +x.toFixed(2), y: +y.toFixed(2) })); };
   if (you) pa.addEventListener("click", (e) => {
     if (e.target.closest("a")) return;                    // clicking another ram opens its page
     const b = pa.getBoundingClientRect();
     you.tx = clampX((e.clientX - b.left) / b.width * 100);
     you.ty = clampY((e.clientY - b.top) / b.height * 100 + 6);   // feet land where you click
-    you.wait = 0;
+    you.wait = 0; send(you.tx, you.ty);
   });
   let last = performance.now();
   function step(now) {
@@ -710,12 +723,16 @@ function pasture() {
       if (s.me) {
         const kx = (keys.arrowright || keys.d ? 1 : 0) - (keys.arrowleft || keys.a ? 1 : 0);
         const ky = (keys.arrowdown || keys.s ? 1 : 0) - (keys.arrowup || keys.w ? 1 : 0);
-        if (kx || ky) { s.x = clampX(s.x + kx * 14 * dt); s.y = clampY(s.y + ky * 14 * dt); s.tx = s.x; s.ty = s.y; moving = true; }
+        if (kx || ky) { s.x = clampX(s.x + kx * 14 * dt); s.y = clampY(s.y + ky * 14 * dt); s.tx = s.x; s.ty = s.y; moving = true;
+          if (now - lastSent > 150) { lastSent = now; send(s.x, s.y); } }
         else {
           const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
           if (d > 0.3) { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; moving = true; }
         }
         if (moving) s.t += dt * 10;
+      } else if (s.remote && Date.now() - s.remote < 120000) {
+        const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
+        if (d > 0.3) { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; s.t += dt * 10; moving = true; }
       } else if (s.wait > 0) s.wait -= dt;
       else {
         const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
@@ -737,6 +754,7 @@ function pasture() {
 
 function render() {
   cancelAnimationFrame(raf);
+  if (tab !== "herd" && sock) { try { sock.close(); } catch {} sock = null; }
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
   if (tab === "herd") { pasture(); return; }
   if (tab === "week") {

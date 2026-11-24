@@ -1,6 +1,8 @@
 // Discord side of the ram game: slash commands, buttons and autocomplete. State lives in the Game Durable Object.
 import { ITEMS, RARITY, SLOT_NAMES, BODY_TYPES } from "./ram.js";
-import { CRATE_COST, PICK_POINTS, PROP_COST, FIGHT_STAKE, STATS, propMessage } from "./game.js";
+import { lockerToken, lockerUser } from "./auth.js";
+export { lockerToken, lockerUser };
+import { CRATE_COST, PICK_POINTS, PROP_COST, FIGHT_STAKE, STATS, propMessage, shown } from "./game.js";
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
@@ -107,6 +109,25 @@ export async function gameCommand(i, env, ctx) {
         })());
         return { type: 4, data: propMessage(r.prop, 0) };
       }
+      if (sub.name === "auto" || sub.name === "random") {
+        const ch = i.channel_id || i.channel?.id;
+        if (sub.name === "auto") await g.setPropsChannel(ch);   // future game days post here automatically
+        const r = sub.name === "auto" ? await g.ramsProps({ channel_id: ch, token: i.token }) : await g.randomProp({ channel_id: ch, token: i.token });
+        if (r.error) return err(r.error);
+        const props = r.props || [r.prop];
+        // first bet is the reply; the rest go out as follow-ups (no extra bot permissions needed)
+        ctx.waitUntil((async () => {
+          await new Promise((s) => setTimeout(s, 1200));
+          const first = await fetch(`https://discord.com/api/v10/webhooks/${i.application_id}/${i.token}/messages/@original`);
+          if (first.ok) { const m = await first.json(); await g.saveMessage(props[0].id, m.channel_id, m.id); }
+          for (const p of props.slice(1)) {
+            const res = await fetch(`https://discord.com/api/v10/webhooks/${i.application_id}/${i.token}?wait=true`, {
+              method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(propMessage(p, 0)) });
+            if (res.ok) { const m = await res.json(); await g.saveMessage(p.id, m.channel_id, m.id); }
+          }
+        })());
+        return { type: 4, data: propMessage(props[0], 0) };
+      }
       if (sub.name === "cancel") {
         const r = await g.cancel(o.id);
         if (r.error) return err(r.error);
@@ -140,22 +161,6 @@ function crateReply(r, uid) {
     embeds: [{ title: "📦 Crate opened", description: lines.join("\n"), color: color(it), image: { url: png(`${SITE}/ram/${uid}/${it.id}~${Date.now()}.svg`) } }],
     components: [{ type: 1, components: buttons }],
   }, true);
-}
-
-// Signed, expiring locker links: uid.expiry.signature (HMAC with a Worker secret, so nobody can forge one).
-const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-async function hmac(env, text) {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode("locker:" + env.DISCORD_BOT_TOKEN), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return b64(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(text)));
-}
-export async function lockerToken(env, uid, hours = 2) {
-  const exp = Math.floor(Date.now() / 1000) + hours * 3600;
-  return `${uid}.${exp}.${await hmac(env, `${uid}.${exp}`)}`;
-}
-export async function lockerUser(env, token) {
-  const [uid, exp, sig] = String(token || "").split(".");
-  if (!uid || !exp || !sig || Number(exp) < Date.now() / 1000) return null;
-  return (await hmac(env, `${uid}.${exp}`)) === sig ? uid : null;
 }
 
 export function fightMessage(f) {
@@ -206,7 +211,7 @@ export async function gameButton(i, env, ctx) {
       if (!res.ok) await fetch(`https://discord.com/api/v10/webhooks/${i.application_id}/${i.token}/messages/@original`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body });
     })());
-    return err(`You're in on bet #${propId} (-${PROP_COST}). If **${r.prop.player}** gets ${r.prop.line}+ ${STATS[r.prop.stat][2]}, you win a crate. RUTS left: **${r.user.points}**.`);
+    return err(`You're in on bet #${propId} (-${PROP_COST}). If **${shown(r.prop.player)}** gets ${r.prop.line}+ ${STATS[r.prop.stat][2]}, you win a crate. RUTS left: **${r.user.points}**.`);
   }
   return err("That button expired.");
 }
