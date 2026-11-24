@@ -1,0 +1,31 @@
+name: Rams Standings
+
+on:
+  workflow_dispatch:        # refresh the pinned standings card now
+
+permissions:
+  contents: write           # to save state/standings.json
+
+concurrency:
+  group: pickem
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python standings.py
+        env:
+          DISCORD_PICKEM_WEBHOOK: ${{ secrets.DISCORD_PICKEM }}
+      - name: Save state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A state
+          git diff --cached --quiet && exit 0
+          git commit -m "Update standings state"
+          git pull --rebase -q && git push

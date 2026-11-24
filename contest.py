@@ -129,6 +129,8 @@ def resolve(now):
     })
     c["resolved"] = answer
     save(data)
+    import standings
+    standings.update(now)
     print(f"Settled '{CONTEST_ID}': {answer}. {len(right)}/{total} got it.")
 
 

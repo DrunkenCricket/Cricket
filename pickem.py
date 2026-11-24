@@ -197,6 +197,9 @@ def main():
     if results:
         post(results)  # permanent record, not deleted next week
         time.sleep(1.2)
+        import standings  # here, not at the top: standings imports this module
+        standings.update(now)
+        time.sleep(1.2)
 
     delete_previous()
     msgs = [post(header)]
