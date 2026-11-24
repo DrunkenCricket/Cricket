@@ -1,0 +1,64 @@
+name: Rams Contest
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "create a contest, resolve (settle) one, or list them"
+        type: choice
+        options: [create, resolve, list]
+        default: create
+      title:
+        description: "create: the question (e.g. Who wins Super Bowl LXI?)"
+        type: string
+        default: ""
+      options:
+        description: "create: 2-10 answers, comma-separated (e.g. Rams, Eagles, Bills)"
+        type: string
+        default: ""
+      close_date:
+        description: "create: lock date YYYY-MM-DD, max 32 days out (blank = 7 days)"
+        type: string
+        default: ""
+      contest_id:
+        description: "resolve: contest id (create prints it; blank on create = made from title)"
+        type: string
+        default: ""
+      winner:
+        description: "resolve: the correct answer, exactly as one of the options"
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: contest
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python contest.py
+        env:
+          DISCORD_PICKEM_WEBHOOK: ${{ secrets.DISCORD_PICKEM }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          ACTION: ${{ inputs.action }}
+          TITLE: ${{ inputs.title }}
+          OPTIONS: ${{ inputs.options }}
+          CLOSE_DATE: ${{ inputs.close_date }}
+          CONTEST_ID: ${{ inputs.contest_id }}
+          WINNER: ${{ inputs.winner }}
+      - name: Save state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A state $([ -d data ] && echo data)
+          git diff --cached --quiet && exit 0
+          git commit -m "Update contests"
+          git pull --rebase -q && git push

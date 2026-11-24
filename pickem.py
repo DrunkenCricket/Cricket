@@ -6,6 +6,9 @@ Every Tuesday at noon PT it fetches the new week, and only if games come back do
 delete last week's polls and post the new ones. Failed runs retry hourly until 3 PM PT.
 Message ids are kept in state/pickem.json (committed back by the workflow).
 
+Before clearing last week's polls, it grades them (needs the DISCORD_BOT_TOKEN secret),
+logs every pick to data/picks.csv, and posts a results + leaderboard card.
+
   DISCORD_PICKEM_WEBHOOK=https://discord.com/api/webhooks/... python pickem.py
   python pickem.py      # no webhook = dry run
 """
@@ -17,6 +20,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
+import grading
 import nfl_week as nw
 
 WEBHOOK = os.environ.get("DISCORD_PICKEM_WEBHOOK", "").strip()
@@ -49,7 +53,7 @@ def discord(method, suffix="", payload=None, query=""):
 
 def post(payload):
     try:
-        return discord("POST", payload=payload, query="wait=true").get("id")
+        return discord("POST", payload=payload, query="wait=true")
     except urllib.error.HTTPError as e:
         sys.exit(f"Discord {e.code}: {e.read().decode(errors='replace')}")
 
@@ -84,17 +88,33 @@ def delete_previous():
         print(f"Deleted {gone} of {len(ids)} old pick'em posts.")
 
 
+PLAYOFF_ROUNDS = {1: "Wild Card", 2: "Divisional Round", 3: "Conference Championship",
+                  4: "Pro Bowl", 5: "Super Bowl"}
+
+
+def week_label(season_type, week_no):
+    if season_type == 3:
+        return PLAYOFF_ROUNDS.get(week_no, f"Playoff Week {week_no}")
+    return f"Week {week_no or '?'}"
+
+
 def games(now):
+    """Returns ([(kick, away, home, event_id)], label, season, week number)."""
     start, end = nw.week_range(now)
     events, week_no = nw.fetch_events(start, end)
-    out = []
+    out, stype, season = [], None, None
     for ev in sorted(events, key=lambda e: e["date"]):
         comp = ev["competitions"][0]
         t = {c["homeAway"]: c["team"] for c in comp["competitors"]}
         kick = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).astimezone(nw.PT)
         if start <= kick.date() <= end:
-            out.append((kick, t["away"], t["home"]))
-    return out, week_no
+            out.append((kick, t["away"], t["home"], ev["id"]))
+            stype = stype or (ev.get("season") or {}).get("type")
+            season = season or (ev.get("season") or {}).get("year")
+            week_no = (ev.get("week") or {}).get("number") or week_no
+    if season is None:
+        season = now.year if now.month >= 3 else now.year - 1
+    return out, week_label(stype, week_no), season, week_no
 
 
 def is_rams(g):
@@ -138,7 +158,7 @@ def main():
         if load_state().get("week_start") == week_start:
             print(f"Already posted for the week of {week_start}.")
             return
-    gs, week_no = games(now)
+    gs, label, season, week_no = games(now)
     # Skip anything kicking off within the hour (Discord's minimum poll length is 1 hour)
     gs = [g for g in gs if (g[0] - now).total_seconds() >= 3600]
     gs.sort(key=lambda g: (not is_rams(g), g[0]))
@@ -147,14 +167,14 @@ def main():
     header = {
         "username": "Rams Pick'em",
         "embeds": [{
-            "title": f"\U0001F3C8  Week {week_no or '?'} Pick'em",
+            "title": f"\U0001F3C8  {label} Pick'em",
             "description": (f"**{len(gs)} games.** Pick a winner in each poll below.\n"
                             f"Each poll locks at kickoff. Times in {tz}.\n\n"
                             "\U0001F40F Rams game is up top."),
             "color": RAMS_BLUE,
         }],
     }
-    polls = [poll_payload(k, a, h, now) for k, a, h in gs]
+    polls = [poll_payload(k, a, h, now) for k, a, h, _ in gs]
 
     if not WEBHOOK:
         print(header["embeds"][0]["title"])
@@ -165,17 +185,33 @@ def main():
         return
 
     if not polls:
+        if 3 <= now.month <= 8:
+            print("Offseason, no games. Nothing to post.")
+            return
         # Don't touch last week's polls. Exit with an error so the run shows red in
         # GitHub (and GitHub emails you), and the next hourly run retries.
         sys.exit(f"ESPN returned no upcoming games for the week of {week_start}. "
                  "Left last week's polls up; will retry next run.")
 
-    delete_previous()
-    ids = [post(header)]
-    for p in polls:
+    results = grading.grade_week(load_state())
+    if results:
+        post(results)  # permanent record, not deleted next week
         time.sleep(1.2)
-        ids.append(post(p))
-    save_state({"message_ids": [i for i in ids if i], "week": week_no, "week_start": week_start,
+
+    delete_previous()
+    msgs = [post(header)]
+    meta = []
+    for (kick, away, home, eid), p in zip(gs, polls):
+        time.sleep(1.2)
+        msg = post(p)
+        msgs.append(msg)
+        teams = [away["abbreviation"], home["abbreviation"]]
+        meta.append({"message_id": msg.get("id"), "event_id": eid, "kick": kick.isoformat(),
+                     "game": f"{teams[0]} @ {teams[1]}", "rams": RAMS in teams,
+                     "answers": grading.answer_map(msg, teams)})
+    save_state({"message_ids": [m.get("id") for m in msgs if m.get("id")],
+                "channel_id": msgs[0].get("channel_id"), "polls": meta,
+                "week": week_no, "label": label, "season": season, "week_start": week_start,
                 "posted": now.isoformat(timespec="minutes")})
     print(f"Posted {len(polls)} polls.")
 

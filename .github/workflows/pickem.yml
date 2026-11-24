@@ -25,12 +25,13 @@ jobs:
       - run: python pickem.py
         env:
           DISCORD_PICKEM_WEBHOOK: ${{ secrets.DISCORD_PICKEM }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           SCHEDULED: ${{ github.event_name == 'schedule' }}
       - name: Save state
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state/pickem.json 2>/dev/null || exit 0
+          git add -A state $([ -d data ] && echo data)
           git diff --cached --quiet && exit 0
-          git commit -m "Update pick'em state"
+          git commit -m "Update pick'em state and picks log"
           git pull --rebase -q && git push
