@@ -21,6 +21,7 @@ import urllib.request
 from datetime import datetime
 
 import grading
+import weather
 import nfl_week as nw
 
 WEBHOOK = os.environ.get("DISCORD_PICKEM_WEBHOOK", "").strip()
@@ -191,6 +192,10 @@ def games(now):
         kick = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).astimezone(nw.PT)
         if start <= kick.date() <= end:
             out.append((kick, t["away"], t["home"], ev["id"]))
+            venue = comp.get("venue") or {}
+            weather.VENUES[ev["id"]] = {"indoor": venue.get("indoor"), "city": (venue.get("address") or {}).get("city"),
+                                        "state": (venue.get("address") or {}).get("state"),
+                                        "espn": (ev.get("weather") or comp.get("weather") or {}).get("displayValue")}
             stype = stype or (ev.get("season") or {}).get("type")
             season = season or (ev.get("season") or {}).get("year")
             week_no = (ev.get("week") or {}).get("number") or week_no
@@ -203,10 +208,12 @@ def is_rams(g):
     return RAMS in (g[1].get("abbreviation"), g[2].get("abbreviation"))
 
 
-def poll_payload(kick, away, home, now, emojis=None):
+def poll_payload(kick, away, home, now, emojis=None, wx=None):
     rams = RAMS in (away.get("abbreviation"), home.get("abbreviation"))
     hours = int((kick - now).total_seconds() // 3600)  # rounds down, so it closes by kickoff
     q = f"{away['shortDisplayName']} @ {home['shortDisplayName']}  |  {kick:%a} {nw.fmt_time(kick)}"
+    if wx:
+        q += f"  |  {wx}"
     if rams:
         q = "\U0001F40F RAMS GAME: " + q
 
@@ -267,7 +274,8 @@ def main():
             "color": RAMS_BLUE,
         }],
     }
-    polls = [poll_payload(k, a, h, now, team_emojis() if WEBHOOK else None) for k, a, h, _ in gs]
+    wx = {eid: weather.line(eid, k) for k, _, _, eid in gs}
+    polls = [poll_payload(k, a, h, now, team_emojis() if WEBHOOK else None, wx.get(eid)) for k, a, h, eid in gs]
 
     if not WEBHOOK:
         print(header["embeds"][0]["title"])
@@ -309,7 +317,7 @@ def main():
         sent[how].append(msg.get("id"))
         teams = [away["abbreviation"], home["abbreviation"]]
         meta.append({"message_id": msg.get("id"), "event_id": eid, "kick": kick.isoformat(),
-                     "game": f"{teams[0]} @ {teams[1]}", "rams": RAMS in teams,
+                     "game": f"{teams[0]} @ {teams[1]}", "rams": RAMS in teams, "weather": wx.get(eid),
                      "answers": grading.answer_map(msg, teams)})
     save_state({"message_ids": [i for i in sent["webhook"] if i],
                 "bot_message_ids": [i for i in sent["bot"] if i],

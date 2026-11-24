@@ -117,7 +117,7 @@ async function weekData(env, ctx) {
         const users = (await voters(env, state.channel_id, p.message_id, answer)).map(person);
         sides.push({ abbr, logo: logo[abbr] || null, users });
       }
-      return { game: p.game, kick: p.kick, rams: !!p.rams, locked: new Date(p.kick).getTime() <= now, sides };
+      return { game: p.game, kick: p.kick, rams: !!p.rams, weather: p.weather || null, locked: new Date(p.kick).getTime() <= now, sides };
     });
     // Remember avatars so the history tab can show them too.
     const seen = {};
@@ -707,7 +707,7 @@ function card(g, result) {
   const status = result ? (result === "TIE" ? "Final · tie" : "Final · " + esc(result) + " won")
     : (g.locked ? '<span class="lock">Locked</span>' : "Open · locks at kickoff");
   return '<div class="game' + (g.rams ? " rams" : "") + '">' + (g.rams ? '<div class="tag">RAMS GAME</div>' : "")
-    + '<div class="meta"><span>' + (g.kick ? when(g.kick) : esc(g.game)) + '</span><span>' + status + '</span></div>'
+    + '<div class="meta"><span>' + (g.kick ? when(g.kick) : esc(g.game)) + (g.weather ? " · " + esc(g.weather) : "") + '</span><span>' + status + '</span></div>'
     + '<div class="vs">' + side(a, total, result) + '<div class="at">@</div>' + side(h, total, result) + '</div>'
     + '<div class="bar"><i style="width:' + ap + '%"></i><b style="width:' + (100 - ap) + '%"></b></div></div>';
 }

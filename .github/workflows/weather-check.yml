@@ -1,0 +1,17 @@
+name: Weather check
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - run: |
+          python - <<'PY'
+          from datetime import datetime
+          import nfl_week as nw, pickem, weather
+          gs, label, *_ = pickem.games(datetime.now(nw.PT))
+          for k, a, h, eid in gs:
+              print(label, a["abbreviation"], "@", h["abbreviation"], weather.VENUES[eid], "->", weather.line(eid, k))
+          PY
