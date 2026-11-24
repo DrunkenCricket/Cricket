@@ -512,7 +512,10 @@ const ring = (c, r = 11, w = 5, gem = "") => `<path d="M ${256 - r * 0.62} 314 A
   <path d="M ${256 - r * 0.62} 314 A ${r} ${r} 0 1 0 ${256 + r * 0.62} 314" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>
   <path d="M ${256 - r * 0.5} ${318 + r * 0.6} q ${r * 0.4} ${r * 0.35} ${r * 0.8} 0" stroke="#fff" stroke-width="2" fill="none" opacity=".6"/>${gem}`;
 const NOSES = [
-  ["ring_gold", "Gold Nose Ring", "rare", ring("#ffc82c")],
+  ["ring_gold", "Connor's Ring", "rare", ring("#ffc82c")],   // the guaranteed one
+  ["reaper", "Reaper Ring", "epic", `<path d="M 232 307 A 13 13 0 1 0 243 319" fill="none" stroke="${OUT}" stroke-width="10" stroke-linecap="round"/>
+    <path d="M 232 307 A 13 13 0 1 0 243 319" fill="none" stroke="#d6dde6" stroke-width="5" stroke-linecap="round"/>
+    <path d="M 220 322 q 4 7 12 8" stroke="#fff" stroke-width="2.5" fill="none" opacity=".8"/>`],
   ["ring_silver", "Silver Nose Ring", "common", ring("#cfd6e0")],
   ["ring_black", "Black Nose Ring", "common", ring("#2b2b33")],
   ["ring_blue", "Royal Blue Nose Ring", "rare", ring("#1f55d6")],
