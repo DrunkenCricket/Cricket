@@ -37,11 +37,11 @@ def _icon(code, rain):
         return "❄️"          # snow
     if code in (95, 96, 99):
         return "⛈️"          # thunder
-    if code >= 51 or rain >= 50:
+    if code >= 51 or rain >= 40:
         return "\U0001F327️"      # rain
     if code in (45, 48):
         return "\U0001F32B️"      # fog
-    if code in (2, 3):
+    if code in (2, 3) or rain >= 20:
         return "⛅"                # clouds
     return "☀️"              # clear
 
