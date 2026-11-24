@@ -49,7 +49,8 @@ def _icon(code, rain):
 def line(event_id, kick):
     """Short weather text for a game, or None."""
     v = VENUES.get(event_id) or {}
-    if v.get("indoor"):
+    # SoFi has a fixed roof even though ESPN lists it as outdoor
+    if v.get("indoor") or v.get("city") == "Inglewood":
         return "\U0001F3DF️ Dome"
     try:
         ll = _coords(v.get("city"), v.get("state")) if v.get("city") else None
