@@ -651,7 +651,7 @@ function pasture() {
   if (!herd) { view.innerHTML = '<div class="empty">Rounding up the herd...</div>'; return; }
   sub.textContent = herd.rams.length + " rams on the field";
   if (!herd.rams.length) { view.innerHTML = '<div class="empty">No rams yet. Open your first crate with /crate in Discord.</div>'; return; }
-  view.innerHTML = '<p class="note">Click a ram to see its gear. Get your own with /crate in Discord, or settle it with /fight.</p><div class="pasture" id="pa"><div class="sun"></div><div class="fence"></div></div>';
+  view.innerHTML = '<p class="note">Click a ram to see its gear. Get your own with /crate in Discord, or settle it with /fight.</p><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML + '</div>';
   const pa = document.getElementById("pa"), still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const rnd = (a, b) => a + Math.random() * (b - a);
   const sheep = herd.rams.map((r) => {
@@ -659,7 +659,7 @@ function pasture() {
     el.className = "rw"; el.href = "/ram/" + r.id;
     el.innerHTML = '<img src="/ram/' + r.id + '.svg?bare" alt=""><span>' + esc(r.name) + (r.points ? '<b>' + r.points + ' RUTS</b>' : "") + '</span>';
     pa.appendChild(el);
-    return { el, img: el.firstChild, x: rnd(14, 86), y: rnd(30, 96), tx: 0, ty: 0, wait: rnd(0, 3) };
+    return { el, img: el.firstChild, x: rnd(14, 86), y: rnd(24, 96), tx: 0, ty: 0, wait: rnd(0, 0.8), speed: rnd(9, 15), t: rnd(0, 6) };
   });
   sheep.forEach((s) => { s.tx = s.x; s.ty = s.y; });
   let last = performance.now();
@@ -670,13 +670,16 @@ function pasture() {
         if (s.wait > 0) s.wait -= dt;
         else {
           const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
-          if (d < 0.5) { s.wait = rnd(1.5, 5); s.tx = Math.max(14, Math.min(86, s.x + rnd(-30, 30))); s.ty = rnd(30, 96); }
-          else { const v = 4 * dt / d; s.x += dx * v; s.y += dy * v * 0.6; }
+          if (d < 0.5) {   // arrived: short breather, then a new spot anywhere on the field (sometimes a sprint)
+            s.wait = Math.random() < .25 ? rnd(1, 2.5) : rnd(0.1, 0.7);
+            s.tx = rnd(14, 86); s.ty = rnd(24, 96); s.speed = Math.random() < .2 ? rnd(22, 30) : rnd(9, 15);
+          } else { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; s.t += dt * s.speed * 0.9; }
         }
       }
-      const k = 0.6 + (s.y - 30) / 66 * 0.5;
+      const k = 0.6 + (s.y - 24) / 72 * 0.5;
       s.el.style.left = s.x + "%"; s.el.style.top = s.y + "%";
-      s.el.style.transform = "scale(" + k.toFixed(3) + ")"; s.el.style.transformOrigin = "50% 100%";
+      const hop = s.wait > 0 ? 0 : -Math.abs(Math.sin(s.t)) * 10;   // trotting bounce while moving
+      s.el.style.transform = "translateY(" + hop.toFixed(1) + "px) scale(" + k.toFixed(3) + ")"; s.el.style.transformOrigin = "50% 100%";
       s.el.style.zIndex = Math.round(s.y * 10);
     }
     raf = requestAnimationFrame(step);
