@@ -193,15 +193,17 @@ def main():
         sys.exit(f"ESPN returned no upcoming games for the week of {week_start}. "
                  "Left last week's polls up; will retry next run.")
 
+    # Order: grade last week (votes have to be read before its polls are deleted),
+    # clear the old polls, post the scorecard, then the new week a minute later.
     results = grading.grade_week(load_state())
+    delete_previous()
     if results:
         post(results)  # permanent record, not deleted next week
-        time.sleep(1.2)
         import standings  # here, not at the top: standings imports this module
         standings.update(now)
-        time.sleep(1.2)
+        print("Scorecard posted. Waiting 1 minute before the new week.")
+        time.sleep(60)
 
-    delete_previous()
     msgs = [post(header)]
     meta = []
     for (kick, away, home, eid), p in zip(gs, polls):
