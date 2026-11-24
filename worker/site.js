@@ -353,10 +353,17 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 <div class="bar"><button class="buy" id="buy">Open crate</button><span id="bodies"></span><span class="err" id="err"></span>
 <div class="reveal" id="rev"></div></div>
 <div class="card0"><div class="chips" id="chips"></div><div class="grid" id="grid"></div></div>
-<p><a href="/#herd">See the herd</a></p></main>
+<p><a href="/">Pick'em</a> · <a href="/#herd">See the herd</a></p></main>
 <script>
 const M = ${JSON.stringify(meta).replace(/</g, "\\u003c")};
-const T = new URLSearchParams(location.hash.slice(1)).get("t");
+// The key comes from /lockeroom in Discord. This browser remembers it until it expires, so the site's Lockeroom tab works too.
+let T = new URLSearchParams(location.hash.slice(1)).get("t");
+try {
+  if (T) localStorage.setItem("lr_t", T);
+  else T = localStorage.getItem("lr_t");
+  if (T && Number(T.split(".")[1]) * 1000 < Date.now()) { localStorage.removeItem("lr_t"); T = null; }
+} catch {}
+if (T && !location.hash) history.replaceState(null, "", "#t=" + T);
 const ICON = { fleece: "🧶", horns: "🐏", shirt: "👕", head: "🧢", eyes: "🕶️", mouth: "😁", neck: "📿", hand: "🏈", feet: "👟", gear: "🛡️", tattoo: "💉", marks: "🩹", bg: "🏟️", finish: "✨", pose: "🙌", body: "💪" };
 const h = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const $ = (id) => document.getElementById(id);
@@ -366,6 +373,7 @@ const ramSrc = (opt) => "/ram/" + S.uid + "/" + (opt ? opt + "-bare" : "bare") +
 async function call(op, extra) {
   const r = await fetch("/api/locker", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ t: T, op, ...extra }) });
   const d = await r.json(); $("err").textContent = d.error || "";
+  if (r.status === 401 || /link expired/.test(d.error || "")) { try { localStorage.removeItem("lr_t"); } catch {} }
   if (d.uid) { S = d; if (op !== "crate") $("ram").firstChild.src = ramSrc(); draw(); }
   return d;
 }
@@ -439,7 +447,11 @@ document.addEventListener("click", (e) => {
   else if (t.dataset.f) { filter = t.dataset.f; draw(); }
   else if (t.dataset.i) t.classList.contains("on") ? call("unequip", { slot: t.dataset.s }) : call("equip", { item: t.dataset.i });
 });
-if (!T) $("sub").textContent = "Run /lockeroom in Discord to get your private link."; else call("state");
+if (!T) {
+  $("sub").innerHTML = "Locked. Type <b>/lockeroom</b> in Discord and click the button to get in. Your key works for 2 hours in this browser.";
+  $("buy").disabled = true; $("buy").textContent = "🔒 Run /lockeroom in Discord";
+  $("ram").firstChild.src = "/ram/100000000000000000/bare~0.svg";
+} else call("state");
 </script></body></html>`;
 }
 
@@ -570,6 +582,7 @@ h1{margin:0;font-size:28px;letter-spacing:.5px}h1 span{color:var(--gold)}
 nav{display:flex;gap:4px}
 nav button{background:none;border:0;color:#c9d3ea;font:inherit;font-weight:600;padding:10px 16px;border-radius:10px 10px 0 0;cursor:pointer}
 nav button.on{background:var(--bg);color:var(--gold)}
+nav .navlink{color:#c9d3ea;font-weight:600;padding:10px 16px;text-decoration:none;border-radius:10px 10px 0 0}nav .navlink:hover{color:var(--gold)}
 main{padding:20px 16px 48px}
 .note{color:var(--muted);margin:0 0 16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
@@ -616,7 +629,7 @@ ${FIELD_CSS}
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="herd">Herd</button></nav>
+<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="herd">Herd</button><a class="navlink" href="/lockeroom">Lockeroom</a></nav>
 </div></header>
 <template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
