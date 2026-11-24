@@ -16,7 +16,7 @@ import nfl_week as nw
 import pickem
 
 STATE = os.path.join(grading.ROOT, "state", "standings.json")
-SHEET = "https://docs.google.com/spreadsheets/d/1GgcU934xu0bw1Z5bAAqILJ-PYJhg5WE-M9XhRbrRb2M/edit"
+SHEET = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJTclMQ4N5VbwYx0yNH-_wVEpyX0h5XAokNwwcSJr8AABTSxNiSjEv6jMmFv2c_SNCN34NACTSqOx5/pubhtml"
 SPACER = {"url": "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/assets/spacer.png"}
 
 
