@@ -281,6 +281,30 @@ export class Game extends DurableObject {
   }
   name(p) { return `${p.player.first_name} ${p.player.last_name}`; }
 
+  /**
+   * Hand-made bet (/prop create). The line defaults to Sleeper's projection, and a line set too far
+   * below the projection (or below a sane floor) gets refused, so nobody posts "Stafford 1+ passing yard".
+   */
+  async manualProp({ player, stat, line, ...opts }) {
+    const FLOOR = { pass_yds: 150, rush_yds: 30, rec_yds: 30, receptions: 2, tackles: 3, sacks: 1, pass_td: 1, rush_td: 1, rec_td: 1, any_td: 1 };
+    let p = null, event = null;
+    if (SLEEPER_KEY[stat] || stat === "any_td") {
+      const { proj, gameOf } = await this.sleeper();
+      const want = norm(player);
+      p = proj.find((x) => norm(this.name(x)) === want) || proj.find((x) => norm(this.name(x)).endsWith(" " + want));
+      if (p) { player = this.name(p); event = gameOf(p.team); }
+    }
+    const fair = p ? lineFor(stat, p.stats) : null;
+    if (line == null) {
+      if (fair == null) return { error: `Couldn't find a projection for ${player}. Add an amount.` };
+      line = fair;
+    }
+    if (line < FLOOR[stat]) return { error: `${line} is too easy. The lowest allowed for this stat is ${FLOOR[stat]}.` };
+    if (fair && stat !== "any_td" && line < fair * 0.75) return { error: `${line} is too easy. Sleeper projects about ${fair}, so go ${Math.ceil(fair * 0.75)} or higher (or leave the amount blank).` };
+    if (event && event.state !== "pre") return { error: `${player}'s game already started.` };
+    return this.createProp({ ...opts, player, stat, line, event: event || undefined });
+  }
+
   /** A completely random bet: any team still to play, any notable player, any stat that fits them. */
   async randomProp(opts = {}) {
     const { proj, gameOf } = await this.sleeper();

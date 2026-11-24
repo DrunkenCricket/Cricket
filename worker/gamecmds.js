@@ -99,7 +99,7 @@ export async function gameCommand(i, env, ctx) {
       const sub = i.data.options[0];
       const o = Object.fromEntries((sub.options || []).map((x) => [x.name, x.value]));
       if (sub.name === "create") {
-        const r = await g.createProp({ player: o.player, stat: o.stat, line: o.amount, minutes: o.minutes, channel_id: i.channel_id || i.channel?.id, token: i.token });
+        const r = await g.manualProp({ player: o.player, stat: o.stat, line: o.amount, minutes: o.minutes, channel_id: i.channel_id || i.channel?.id, token: i.token });
         if (r.error) return err(r.error);
         // grab the posted message's id so results can be edited in later
         ctx.waitUntil((async () => {
