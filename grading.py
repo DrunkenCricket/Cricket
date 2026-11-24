@@ -122,13 +122,14 @@ def append_csv(path, fields, rows):
 # ---------- weekly pick'em ----------
 
 def grade_week(state):
-    """Grade last week's polls. Returns a Discord payload with results, or None."""
+    """Log every finished, not-yet-logged game from last week's polls to data/picks.csv.
+    Safe to run more than once: games already in the log are skipped."""
     polls, channel = state.get("polls") or [], state.get("channel_id")
     if not polls or not channel:
-        return None
+        return 0
     if not TOKEN:
         print("No DISCORD_BOT_TOKEN secret, so last week's picks can't be graded.")
-        return None
+        return 0
 
     done = {r["event_id"] for r in read_csv(PICKS_CSV)}
     rows, games = [], []
@@ -152,9 +153,21 @@ def grade_week(state):
 
     append_csv(PICKS_CSV, PICK_FIELDS, rows)
     print(f"Graded {len(games)} games, {len(rows)} picks.")
+    return len(rows)
+
+
+def week_results(state):
+    """Scorecard for last week, built from the log. None if nothing was graded."""
+    polls = {p["event_id"]: p for p in state.get("polls") or []}
+    rows = [r for r in read_csv(PICKS_CSV) if r["event_id"] in polls]
     if not rows:
         return None
-    return results_payload(state, rows, games)
+    games = {}
+    for r in rows:
+        g = games.setdefault(r["event_id"], {"game": r["game"], "winner": r["winner"], "votes": defaultdict(int),
+                                             "rams": polls[r["event_id"]].get("rams")})
+        g["votes"][r["pick"]] += 1
+    return results_payload(state, rows, [dict(g, votes=dict(g["votes"])) for g in games.values()])
 
 
 def tally(rows):

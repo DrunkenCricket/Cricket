@@ -149,6 +149,14 @@ def poll_payload(kick, away, home, now):
 def main():
     now = datetime.now(nw.PT)
     week_start = nw.week_range(now)[0].isoformat()
+    # Monday 11 PM PT run (06:00/07:00 UTC Tuesday, covering PDT and PST): log last
+    # week's picks only. Tuesday noon then posts the scorecard and the new week.
+    if SCHEDULED and ((now.weekday() == 0 and now.hour >= 23) or (now.weekday() == 1 and now.hour < 6)):
+        grading.grade_week(load_state())
+        return
+    if SCHEDULED and now.weekday() == 0:
+        print(f"{now:%a %H:%M} PT, before 11 PM. Skipping.")
+        return
     # Cron fires hourly 19:00-23:00 UTC on Tuesdays. The first run at or after noon PT
     # posts; later runs retry only if that one failed.
     if SCHEDULED:
@@ -195,7 +203,8 @@ def main():
 
     # Order: grade last week (votes have to be read before its polls are deleted),
     # clear the old polls, post the scorecard, then the new week a minute later.
-    results = grading.grade_week(load_state())
+    grading.grade_week(load_state())  # picks up anything Monday night missed
+    results = grading.week_results(load_state())
     delete_previous()
     if results:
         post(results)  # permanent record, not deleted next week
