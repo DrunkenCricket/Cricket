@@ -57,6 +57,28 @@ export const BODIES = {
       <path d="M 256 350 l 0 66" stroke="${OUT}" stroke-width="4" opacity=".6"/>`,
   },
 };
+BODIES.thin = {
+  torso: "M 182 410 C 176 336, 206 304, 256 304 C 306 304, 336 336, 330 410 C 320 432, 192 432, 182 410 Z",
+  armL: "M 188 336 C 166 350, 160 380, 164 404", armR: "M 324 336 C 346 350, 352 380, 348 404",
+  upperL: "M 188 336 C 176 342, 168 354, 166 366", upperR: "M 324 336 C 336 342, 344 354, 346 366",
+  handL: [164, 410], handR: [348, 410], arm: 16, legs: [228, 284], hip: 418,
+  shoulders: [[196, 324], [316, 324]], bicepL: [170, 360], bicepR: [342, 360], chest: [256, 354], belt: 414,
+};
+BODIES.med = BODIES.standard;
+BODIES.large = BODIES.belly;
+// Free body types everyone can pick. "buff" (abs) stays a crate unlock.
+export const BODY_TYPES = { thin: "Thin", med: "Medium", large: "Large" };
+item("body_buff", "Buff Body", "body", "epic");
+
+/** Tank-top shape: thin straps, scoop neck, open armholes. Clipped to the torso when drawn. */
+function tankPath(b) {
+  const cx = 256, top = b.shoulders[0][1] - 26;
+  const w = (b.shoulders[1][0] - b.shoulders[0][0]) / 160;
+  const oL = cx - 50 * w, iL = cx - 30 * w, oR = cx + 50 * w, iR = cx + 30 * w;
+  return `M 60 ${top + 104} C ${oL - 40} ${top + 104}, ${oL - 6} ${top + 70}, ${oL} ${top} L ${iL} ${top}
+    Q ${cx} ${top + 132} ${iR} ${top} L ${oR} ${top} C ${oR + 6} ${top + 70}, ${oR + 40} ${top + 104}, 452 ${top + 104} L 452 520 L 60 520 Z`;
+}
+
 export const FACES = { tan: "#d9b98a", brown: "#a87a4f", dark: "#3d3330", gray: "#9a958f" };
 // Base looks. Boy is the free starter. The girl base is guaranteed from a player's first crate
 // (the backend hands out FIRST_CRATE instead of a random roll on crate #1).
@@ -455,7 +477,7 @@ const GIRL_BUST = `<path d="M 206 346 C 214 372, 246 372, 254 352 M 258 352 C 26
 
 export function renderRam(look = {}, size = 512) {
   const I = (slot) => ITEMS[look[slot]];
-  const body = BODIES[look.body] || BODIES.standard;
+  const body = BODIES[(look.body || "").replace("body_", "")] || BODIES.med;
   const girl = look.base === "girl" || look.base === "base_girl";
   const faceC = FACES[look.face] || FACES.tan;
   const fleeceItem = I("fleece") || ITEMS.fleece_cream;
@@ -485,13 +507,23 @@ export function renderRam(look = {}, size = 512) {
     ? `<path transform="translate(${x},${y})" d="M -12 -8 q -6 18 6 26 q 6 4 10 -2 q 4 6 10 2 q 6 -2 4 -12 q 4 -10 -8 -18 Z" fill="#e2bf98" stroke="#7a5634" stroke-width="2"/>`
     : `<circle cx="${x}" cy="${y}" r="${body.arm * 0.7 + 4}" fill="${faceC}" ${S}/>`).join("");
 
+  const decoBody = { ...body, chest: [body.chest[0], body.chest[1] + (cut === "tank" ? 24 : girl ? 14 : 0)] };
   const id = "c" + Math.random().toString(36).slice(2, 7);
   let torso;
-  if (design) {
+  if (design && cut === "tank") {
+    // fleece body first, then the tank clipped to torso ∩ tank shape, then its edge lines
+    const tk = tankPath(body);
+    torso = `<clipPath id="${id}"><path d="${body.torso}"/></clipPath>
+      <path d="${body.torso}" fill="${fleece}"/>${body.skin || ""}
+      <g clip-path="url(#${id})"><clipPath id="${id}t"><path d="${tk}"/></clipPath>
+        <g clip-path="url(#${id}t)"><rect width="512" height="512" fill="${design.fill}"/>${design.pattern || ""}</g>
+        <path d="${tk}" fill="none" stroke="${OUT}" stroke-width="7" stroke-linejoin="round"/></g>
+      ${design.deco ? design.deco(decoBody) : ""}
+      ${girl ? GIRL_BUST : ""}<path d="${body.torso}" fill="none" ${S}/>`;
+  } else if (design) {
     torso = `<clipPath id="${id}"><path d="${body.torso}"/></clipPath><path d="${body.torso}" fill="${design.fill}"/>
-      <g clip-path="url(#${id})">${design.pattern || ""}</g>${design.deco ? design.deco(body) : ""}
+      <g clip-path="url(#${id})">${design.pattern || ""}</g>${design.deco ? design.deco(decoBody) : ""}
       ${girl ? GIRL_BUST : ""}<path d="${body.torso}" fill="none" ${S}/>
-      ${cut === "tank" ? body.shoulders.map(([x, y]) => `<ellipse cx="${x}" cy="${y + 6}" rx="18" ry="14" fill="${fleece}"/>`).join("") : ""}
       <path d="M 228 302 L 256 330 L 284 302" fill="${design.collar}" ${S}/>`;
   } else {
     torso = `<path d="${body.torso}" fill="${fleece}" ${S}/>${body.skin || ""}`;
