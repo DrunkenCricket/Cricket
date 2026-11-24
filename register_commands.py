@@ -18,6 +18,12 @@ COMMANDS = [
     {"name": "ruts", "description": "Your RUTS, crates and the RUTS leaderboard", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose RUTS to show", "required": False}]},
     {"name": "lockeroom", "description": "The Lockeroom: unbox crates, shop with RUTS and dress your ram on the website", "type": 1, "contexts": [0]},
+    {"name": "moments", "description": "Mods: show !flag / !TD GIFs on the website", "type": 1, "contexts": [0], "default_member_permissions": "32",
+     "options": [
+         {"type": 1, "name": "here", "description": "Start (or stop) watching this channel for tracked triggers"},
+         {"type": 1, "name": "trigger", "description": "Track (or stop tracking) a ! command, like flag or td", "options": [
+             {"type": 3, "name": "name", "description": "The command without the !", "required": True, "max_length": 32}]},
+         {"type": 1, "name": "list", "description": "What's being watched"}]},
     {"name": "giveruts", "description": "Mods: give someone RUTS (or a negative number to take some)", "type": 1, "contexts": [0],
      "default_member_permissions": str(1 << 40),   # Timeout Members: mods have it; server settings can change who sees this
      "options": [{"type": 6, "name": "user", "description": "Who gets them", "required": True},

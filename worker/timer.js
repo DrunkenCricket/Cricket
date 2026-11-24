@@ -55,7 +55,7 @@ export async function runTimer(now, env) {
     await dispatch(env, "pickem.yml");
   }
   // Ram game: award pick points and settle prop bets (every 2 minutes).
-  if (pt.minute % 2 === 0 && env.GAME) {
+  if (env.GAME) {   // ram game: pick points, bets, moments (every minute; the heavier bits rate-limit themselves)
     try { await env.GAME.get(env.GAME.idFromName("main")).tick(); } catch (e) { console.log("game tick", e); }
   }
   const kick = await ramsKickoff(pt);

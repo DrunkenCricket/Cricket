@@ -6,7 +6,7 @@ import { CRATE_COST, PICK_POINTS, PROP_COST, FIGHT_STAKE, STATS, propMessage, sh
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
-export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts"]);
+export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts", "moments"]);
 
 const game = (env) => env.GAME.get(env.GAME.idFromName("main"));
 const who = (i) => i.member?.user || i.user;
@@ -84,6 +84,20 @@ export async function gameCommand(i, env, ctx) {
       const link = `${SITE}/lockeroom#t=${await lockerToken(env, uid)}`;
       return msg({ content: "🎒 **The Lockeroom**: unbox crates, buy more with RUTS, and dress your ram. This link is just for you and works for 2 hours.",
         components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Enter the Lockeroom", emoji: { name: "🎒" } }] }] }, true);
+    }
+
+    case "moments": {
+      const sub = i.data.options[0];
+      if (sub.name === "here") {
+        const on = await g.toggleMomentChannel(i.channel_id || i.channel?.id);
+        return err(on ? "Watching this channel. Tracked triggers with a GIF reply will pop up on the website." : "Stopped watching this channel.");
+      }
+      if (sub.name === "trigger") {
+        const r = await g.toggleTrigger(sub.options[0].value);
+        return err(`${r.on ? "Now" : "No longer"} tracking that. Tracked: ${r.triggers.map((t) => "!" + t).join(", ")}`);
+      }
+      const c = await g.momentConfig();
+      return err(`Channels: ${Object.keys(c.channels).map((id) => `<#${id}>`).join(", ") || "none yet (run /moments here)"}\nTriggers: ${c.triggers.map((t) => "!" + t).join(", ")}`);
     }
 
     case "giveruts": {

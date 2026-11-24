@@ -644,6 +644,14 @@ ${FIELD_CSS}
 .rw span{display:inline-block;margin-top:-14px;background:rgba(0,0,0,.6);padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap}
 .rw span b{color:var(--gold);font-weight:700;margin-left:4px}
 .rw:hover span{background:var(--gold);color:#111}
+#moments{position:fixed;right:16px;bottom:16px;z-index:5000;display:flex;flex-direction:column-reverse;gap:10px;pointer-events:none}
+.moment{width:min(320px,calc(100vw - 32px));background:#000;border:3px solid var(--gold);border-radius:14px;overflow:hidden;
+  box-shadow:0 10px 40px rgba(0,0,0,.6);animation:pop .35s cubic-bezier(.2,1.4,.4,1);transition:opacity .5s,transform .5s}
+.moment.gone{opacity:0;transform:translateY(20px)}.moment img,.moment video{width:100%;display:block;max-height:260px;object-fit:cover}
+.moment .mt{padding:8px 12px;font-size:15px}.moment .mt b{color:var(--gold)}.moment .mt span{color:var(--muted);float:right}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.pflag{position:absolute;font-size:44px;z-index:999;animation:toss .7s cubic-bezier(.3,1.5,.5,1)}
+@keyframes toss{from{transform:translate(-120px,-200px) rotate(-200deg);opacity:0}to{transform:none;opacity:1}}
 .rw.me{cursor:default}.rw.me span{background:var(--gold);color:#111;box-shadow:0 0 0 2px #111}.rw.me span b{color:#111}
 .rw.me img{filter:drop-shadow(0 0 10px rgba(255,200,44,.9))}.pasture.field{cursor:crosshair}
 .note b{color:var(--gold)}.rw:hover span b{color:#111}
@@ -690,7 +698,29 @@ function card(g, result) {
 const keys = {};
 addEventListener("keydown", (e) => { if (tab === "herd" && /^(Arrow|[wasd]$)/i.test(e.key)) { keys[e.key.toLowerCase()] = true; e.preventDefault(); } });
 addEventListener("keyup", (e) => { delete keys[e.key.toLowerCase()]; });
-let sock = null;
+// One live connection per page: Herd moves and !flag / !TD moments both come through it.
+let sock = null, herdHandler = null, lastSnap = null;
+function connect() {
+  sock = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/herd");
+  sock.onopen = () => { const k = myKey(); if (k) sock.send(JSON.stringify({ t: "hello", k })); };
+  sock.onmessage = (e) => { const m = JSON.parse(e.data);
+    if (m.t === "snap") lastSnap = m;
+    if (m.t === "moment") showMoment(m);
+    if (herdHandler) herdHandler(m); };
+  sock.onclose = () => setTimeout(connect, 5000);
+}
+const MOMENT = { flag: ["🟨", "FLAG!"], td: ["🏈", "TOUCHDOWN!"], touchdown: ["🏈", "TOUCHDOWN!"] };
+function showMoment(m) {
+  const [icon, title] = MOMENT[m.cmd] || ["🎉", "!" + m.cmd.toUpperCase()];
+  const box = document.createElement("div"); box.className = "moment";
+  box.innerHTML = (m.kind === "video" ? '<video autoplay muted loop playsinline src="' + esc(m.url) + '"></video>' : '<img alt="" src="' + esc(m.url) + '">')
+    + '<div class="mt">' + icon + " <b>" + esc(title) + "</b> <span>" + esc(m.by) + "</span></div>";
+  let stack = document.getElementById("moments");
+  if (!stack) { stack = document.createElement("div"); stack.id = "moments"; document.body.appendChild(stack); }
+  stack.appendChild(box);
+  setTimeout(() => box.classList.add("gone"), 9000); setTimeout(() => box.remove(), 9600);
+  if (herdHandler) herdHandler({ t: "fx", cmd: m.cmd });
+}
 function myKey() { try { const t = localStorage.getItem("lr_t"); if (t && Number(t.split(".")[1]) * 1000 > Date.now()) return t; } catch {} return null; }
 function myId() {
   try { const t = localStorage.getItem("lr_t"); if (t && Number(t.split(".")[1]) * 1000 > Date.now()) return t.split(".")[0]; } catch {}
@@ -723,12 +753,25 @@ function pasture() {
   const byId = Object.fromEntries(sheep.map((s, i) => [herd.rams[i].id, s]));
   // Live: other players' moves arrive over a websocket; their rams walk where they clicked.
   const drive = (id, x, y, snap) => { const s = byId[id]; if (!s || s.me) return; s.remote = Date.now(); s.tx = x; s.ty = y; s.speed = 9; s.wait = 0; if (snap) { s.x = x; s.y = y; } };
-  try { if (sock) sock.close(); } catch {}
-  sock = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/herd");
-  sock.onopen = () => { const k = myKey(); if (k) sock.send(JSON.stringify({ t: "hello", k })); };
-  sock.onmessage = (e) => { const m = JSON.parse(e.data);
+  herdHandler = (m) => {
     if (m.t === "snap") for (const [id, p] of Object.entries(m.pos)) { if (byId[id]?.me) { you.x = you.tx = p.x; you.y = you.ty = p.y; } else drive(id, p.x, p.y, true); }
-    if (m.t === "go") drive(m.id, m.x, m.y); };
+    if (m.t === "go") drive(m.id, m.x, m.y);
+    if (m.t === "fx") fieldFx(m.cmd);
+  };
+  if (lastSnap) herdHandler(lastSnap);
+  // !TD: the whole herd celebrates. !flag: a penalty flag lands on the field and everyone points.
+  function fieldFx(cmd) {
+    const td = cmd === "td" || cmd === "touchdown", flag = cmd === "flag";
+    if (!td && !flag) return;
+    sheep.forEach((s, i) => { s.img.src = "/ram/" + herd.rams[i].id + ".svg?bare&pose=" + (td ? (i % 2 ? "pose_td" : "pose_roof") : "pose_point"); });
+    setTimeout(() => sheep.forEach((s, i) => { s.img.src = "/ram/" + herd.rams[i].id + ".svg?bare"; }), 7000);
+    if (flag) {
+      const f = document.createElement("div"); f.className = "pflag";
+      f.innerHTML = '<svg viewBox="-34 -34 68 68" width="56" height="56"><path d="M -26 -18 C -14 -30, 10 -26, 24 -20 C 30 -4, 26 12, 18 22 C 0 28, -18 24, -28 14 C -32 2, -30 -8, -26 -18 Z" fill="#ffd400" stroke="#15172b" stroke-width="5"/><path d="M -12 -12 C -2 -2, 6 4, 14 8 M -18 6 C -8 8, 0 2, 4 -6" stroke="#0003" stroke-width="4" fill="none"/><circle cx="20" cy="18" r="8" fill="#ffd400" stroke="#15172b" stroke-width="4"/></svg>';
+      f.style.left = (20 + Math.random() * 60) + "%"; f.style.top = (40 + Math.random() * 45) + "%"; pa.appendChild(f);
+      setTimeout(() => f.remove(), 7000);
+    }
+  }
   let lastSent = 0;
   const send = (x, y) => { if (sock && sock.readyState === 1 && you) sock.send(JSON.stringify({ t: "go", x: +x.toFixed(2), y: +y.toFixed(2) })); };
   if (you) pa.addEventListener("click", (e) => {
@@ -797,7 +840,7 @@ function betsView() {
 
 function render() {
   cancelAnimationFrame(raf);
-  if (tab !== "herd" && sock) { try { sock.close(); } catch {} sock = null; }
+  if (tab !== "herd") herdHandler = null;
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
   if (tab === "herd") { pasture(); return; }
   if (tab === "bets") { betsView(); return; }
@@ -829,6 +872,7 @@ if (["week", "last", "table", "herd", "bets"].includes(location.hash.slice(1))) 
 fetch("/api/week").then((r) => r.json()).then((d) => { week = d; if (tab === "week") render(); }).catch((e) => { week = {error: e.message}; render(); });
 render();
 fetch("/api/history").then((r) => r.json()).then((d) => { hist = d; if (tab === "last" || tab === "table") render(); }).catch(() => {});
+connect();
 fetch("/api/bets").then((r) => r.json()).then((d) => { bets = d.bets; if (tab === "bets") render(); }).catch(() => { bets = []; });
 fetch("/api/herd").then((r) => r.json()).then((d) => { herd = d; if (tab === "herd") render(); }).catch(() => { herd = { rams: [] }; });
 </script>

@@ -90,6 +90,7 @@ export class Game extends DurableObject {
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
     server.send(JSON.stringify({ t: "snap", pos: this.herdPos() }));
+    if (!(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(Date.now() + 1000);   // someone's watching: poll fast
     return new Response(null, { status: 101, webSocket: client });
   }
   herdPos() {
@@ -115,6 +116,79 @@ export class Game extends DurableObject {
     for (const other of this.ctx.getWebSockets()) if (other !== ws) { try { other.send(msg); } catch {} }
   }
   webSocketClose(ws, code) { try { ws.close(code, "bye"); } catch {} }
+  broadcast(obj) { const msg = JSON.stringify(obj); for (const ws of this.ctx.getWebSockets()) { try { ws.send(msg); } catch {} } }
+
+  // ---------- moments: !flag, !TD and friends show up on the website ----------
+  // The bot reads the watched channels (Message Content intent is on). When someone types a tracked
+  // trigger and a bot (Carl-bot) answers with a GIF within 20 seconds, that GIF goes to every open site tab.
+  // Every 15 seconds while anyone has the site open, otherwise once a minute from the cron.
+  async alarm() {
+    try { await this.pollMoments(); } catch (e) { console.log("moments", e); }
+    if (this.ctx.getWebSockets().length) await this.ctx.storage.setAlarm(Date.now() + 15_000);
+  }
+  momentConfig() {
+    return { channels: JSON.parse(this.meta("momentChannels") || "{}"), triggers: JSON.parse(this.meta("momentTriggers") || '["flag","td","touchdown"]') };
+  }
+  toggleMomentChannel(id) {
+    const c = this.momentConfig().channels;
+    if (c[id] !== undefined) delete c[id]; else c[id] = "";
+    this.meta("momentChannels", JSON.stringify(c));
+    return c[id] !== undefined;
+  }
+  toggleTrigger(name) {
+    const t = this.momentConfig().triggers, n = name.toLowerCase().replace(/^!/, "");
+    const on = !t.includes(n);
+    this.meta("momentTriggers", JSON.stringify(on ? [...t, n] : t.filter((x) => x !== n)));
+    return { on, triggers: this.momentConfig().triggers };
+  }
+  static media(m) {
+    for (const e of m.embeds || []) {
+      if (e.video?.url) return { url: e.video.url, kind: "video", still: e.thumbnail?.url };
+      if (e.image?.url) return { url: e.image.url, kind: "image" };
+      if (e.thumbnail?.url && /gif|tenor|giphy/i.test(e.url || e.thumbnail.url)) return { url: e.thumbnail.url, kind: "image" };
+    }
+    for (const a of m.attachments || []) {
+      if (/^video\//.test(a.content_type || "")) return { url: a.url, kind: "video" };
+      if (/^image\//.test(a.content_type || "")) return { url: a.url, kind: "image" };
+    }
+    const link = (m.content || "").match(/https?:\/\/\S+\.(gif|png|jpe?g|webp|mp4)(\?\S*)?/i);
+    return link ? { url: link[0], kind: /mp4/i.test(link[1]) ? "video" : "image" } : null;
+  }
+  async pollMoments() {
+    const { channels, triggers } = this.momentConfig();
+    const ids = Object.keys(channels);
+    if (!ids.length) return 0;
+    let found = 0;
+    for (const ch of ids) {
+      const after = channels[ch];
+      const res = await fetch(`https://discord.com/api/v10/channels/${ch}/messages?limit=50${after ? `&after=${after}` : ""}`,
+        { headers: { Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}` } });
+      if (!res.ok) { console.log("moments read", ch, res.status); continue; }
+      const msgs = (await res.json()).reverse();
+      if (!msgs.length) continue;
+      channels[ch] = msgs[msgs.length - 1].id;
+      if (!after) continue;                         // first look at a channel: just mark the spot
+      let pending = null;
+      for (const m of msgs) {
+        const ts = Date.parse(m.timestamp);
+        const cmd = !m.author?.bot && (m.content || "").trim().match(/^!(\w+)/)?.[1]?.toLowerCase();
+        if (cmd && triggers.includes(cmd)) { pending = { cmd, by: m.member?.nick || m.author.global_name || m.author.username, ts }; continue; }
+        if (pending && m.author?.bot && ts - pending.ts < 20_000) {
+          const media = Game.media(m);
+          if (media) {
+            const moment = { t: "moment", cmd: pending.cmd, by: pending.by, ...media, at: ts };
+            const recent = JSON.parse(this.meta("moments") || "[]");
+            this.meta("moments", JSON.stringify([moment, ...recent].slice(0, 20)));
+            this.broadcast(moment);
+            found++; pending = null;
+          }
+        }
+      }
+    }
+    this.meta("momentChannels", JSON.stringify(channels));
+    return found;
+  }
+  recentMoments() { return JSON.parse(this.meta("moments") || "[]"); }
 
   // ---------- helpers ----------
   one(q, ...a) { return this.sql.exec(q, ...a).toArray()[0]; }
@@ -505,6 +579,7 @@ export class Game extends DurableObject {
   }
 
   async tick() {
+    if (!this.ctx.getWebSockets().length) { try { await this.pollMoments(); } catch (e) { console.log("moments", e); } }
     await this.grantOnce("launch50", 50, "Welcome gift");
     try { await this.autoPost(); } catch (e) { console.log("autoPost", e); }
     for (const f of this.all("SELECT * FROM fights WHERE status='pending' AND created < ?", Date.now() - FIGHT_TTL)) this.endFight(f, "expired");
