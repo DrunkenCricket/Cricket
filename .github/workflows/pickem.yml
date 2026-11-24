@@ -2,9 +2,9 @@ name: Rams Pick'em
 
 on:
   schedule:
-    # Tuesday noon PT: 20:00 UTC in PST, 19:00 UTC in PDT. The script only acts on the noon run.
-    - cron: "0 19 * * 2"
-    - cron: "0 20 * * 2"
+    # Tuesdays, hourly 19:00-23:00 UTC (11 AM-3 PM PST / noon-4 PM PDT).
+    # The script posts on the first run at or after noon PT; later runs retry if that failed.
+    - cron: "0 19-23 * * 2"
   workflow_dispatch:        # manual runs always delete the old polls and post now
 
 permissions:

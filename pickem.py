@@ -2,7 +2,8 @@
 """Post a Discord poll for every NFL game this week (Tue-Mon). Rams game first.
 Each poll closes at (or just before) kickoff.
 
-Every Tuesday at noon PT it deletes last week's polls, then posts the new week.
+Every Tuesday at noon PT it fetches the new week, and only if games come back does it
+delete last week's polls and post the new ones. Failed runs retry hourly until 3 PM PT.
 Message ids are kept in state/pickem.json (committed back by the workflow).
 
   DISCORD_PICKEM_WEBHOOK=https://discord.com/api/webhooks/... python pickem.py
@@ -127,10 +128,16 @@ def poll_payload(kick, away, home, now):
 
 def main():
     now = datetime.now(nw.PT)
-    # Cron runs at 19:00 and 20:00 UTC so one of them is noon PT in both PST and PDT.
-    if SCHEDULED and now.hour != 12:
-        print(f"{now:%H:%M} PT, not noon. Skipping.")
-        return
+    week_start = nw.week_range(now)[0].isoformat()
+    # Cron fires hourly 19:00-23:00 UTC on Tuesdays. The first run at or after noon PT
+    # posts; later runs retry only if that one failed.
+    if SCHEDULED:
+        if now.hour < 12:
+            print(f"{now:%H:%M} PT, before noon. Skipping.")
+            return
+        if load_state().get("week_start") == week_start:
+            print(f"Already posted for the week of {week_start}.")
+            return
     gs, week_no = games(now)
     # Skip anything kicking off within the hour (Discord's minimum poll length is 1 hour)
     gs = [g for g in gs if (g[0] - now).total_seconds() >= 3600]
@@ -157,16 +164,18 @@ def main():
                   + " vs ".join(a["poll_media"]["text"] for a in pl["answers"]))
         return
 
-    delete_previous()
     if not polls:
-        save_state({"message_ids": [], "week": week_no})
-        print("No upcoming games left this week.")
-        return
+        # Don't touch last week's polls. Exit with an error so the run shows red in
+        # GitHub (and GitHub emails you), and the next hourly run retries.
+        sys.exit(f"ESPN returned no upcoming games for the week of {week_start}. "
+                 "Left last week's polls up; will retry next run.")
+
+    delete_previous()
     ids = [post(header)]
     for p in polls:
         time.sleep(1.2)
         ids.append(post(p))
-    save_state({"message_ids": [i for i in ids if i], "week": week_no,
+    save_state({"message_ids": [i for i in ids if i], "week": week_no, "week_start": week_start,
                 "posted": now.isoformat(timespec="minutes")})
     print(f"Posted {len(polls)} polls.")
 
