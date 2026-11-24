@@ -81,6 +81,7 @@ export class Game extends DurableObject {
       CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
       CREATE TABLE IF NOT EXISTS fights (id INTEGER PRIMARY KEY AUTOINCREMENT, a TEXT, b TEXT, a_name TEXT, b_name TEXT, stake INTEGER,
         status TEXT DEFAULT 'pending', winner TEXT, rounds INTEGER, seed INTEGER, a_look TEXT, b_look TEXT, channel_id TEXT, created INTEGER);`);
+    try { this.sql.exec("ALTER TABLE props ADD COLUMN created_by TEXT"); } catch {}   // who posted each bet (older bets: null)
   }
 
   // ---------- live Herd: everyone sees where everyone drives their ram ----------
@@ -327,13 +328,13 @@ export class Game extends DurableObject {
     return found;   // null = no line for this player yet (didn't record a stat in this category)
   }
 
-  async createProp({ player, stat, line, minutes, channel_id, token, event }) {
+  async createProp({ player, stat, line, minutes, channel_id, token, event, by }) {
     const g = event || await this.ramsGame();
     if (!g) return { error: "Couldn't find the Rams' next game on ESPN." };
     const now = Date.now();
     const closes = minutes ? now + minutes * 60_000 : g.kick > now ? g.kick : now + 10 * 60_000;
-    this.sql.exec("INSERT INTO props (event_id, game, player, stat, line, closes, channel_id, token, created) VALUES (?,?,?,?,?,?,?,?,?)",
-      g.id, g.name, player, stat, line, closes, channel_id ?? null, token ?? null, now);
+    this.sql.exec("INSERT INTO props (event_id, game, player, stat, line, closes, channel_id, token, created, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      g.id, g.name, player, stat, line, closes, channel_id ?? null, token ?? null, now, by ?? null);
     return { prop: this.one("SELECT * FROM props WHERE id = last_insert_rowid()") };
   }
 
@@ -465,9 +466,18 @@ export class Game extends DurableObject {
     return players;
   }
 
-  cancel(propId) {
+  /** Anyone can post bets, one per minute each, so the channel doesn't flood. */
+  propCooldown(uid) {
+    const last = Number(this.meta(`propcd:${uid}`) || 0), wait = 60_000 - (Date.now() - last);
+    if (wait > 0) return Math.ceil(wait / 1000);
+    this.meta(`propcd:${uid}`, Date.now());
+    return 0;
+  }
+  /** The person who posted a bet can cancel it; mods can cancel any. */
+  cancel(propId, uid, isMod) {
     const p = this.one("SELECT * FROM props WHERE id=?", propId);
     if (!p || p.status === "hit" || p.status === "miss") return { error: "Can't cancel that one." };
+    if (!isMod && p.created_by !== uid) return { error: "Only whoever posted this bet (or a mod) can cancel it." };
     this.sql.exec("UPDATE props SET status='cancelled' WHERE id=?", propId);
     const players = this.all("SELECT user_id FROM entries WHERE prop_id=?", propId).map((r) => r.user_id);
     for (const uid of players) this.pay(`refund:${propId}:${uid}`, uid, PROP_COST, `Bet #${propId} cancelled`);

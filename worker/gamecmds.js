@@ -124,8 +124,13 @@ export async function gameCommand(i, env, ctx) {
     case "prop": {
       const sub = i.data.options[0];
       const o = Object.fromEntries((sub.options || []).map((x) => [x.name, x.value]));
+      const perms = BigInt(i.member?.permissions || 0), isMod = !!((perms & 8n) || (perms & 32n) || (perms & (1n << 40n)));
+      if (["create", "auto", "random"].includes(sub.name)) {
+        const wait = await g.propCooldown(uid);
+        if (wait) return err(`Slow down: you can post another bet in ${wait}s.`);
+      }
       if (sub.name === "create") {
-        const r = await g.manualProp({ player: o.player, stat: o.stat, line: o.amount, minutes: o.minutes, channel_id: i.channel_id || i.channel?.id, token: i.token });
+        const r = await g.manualProp({ player: o.player, stat: o.stat, line: o.amount, minutes: o.minutes, channel_id: i.channel_id || i.channel?.id, token: i.token, by: uid });
         if (r.error) return err(r.error);
         // grab the posted message's id so results can be edited in later
         ctx.waitUntil((async () => {
@@ -138,7 +143,7 @@ export async function gameCommand(i, env, ctx) {
       if (sub.name === "auto" || sub.name === "random") {
         const ch = i.channel_id || i.channel?.id;
         if (sub.name === "auto") await g.setPropsChannel(ch);   // future game days post here automatically
-        const r = sub.name === "auto" ? await g.ramsProps({ channel_id: ch, token: i.token }) : await g.randomProp({ channel_id: ch, token: i.token });
+        const r = sub.name === "auto" ? await g.ramsProps({ channel_id: ch, token: i.token, by: uid }) : await g.randomProp({ channel_id: ch, token: i.token, by: uid });
         if (r.error) return err(r.error);
         const props = r.props || [r.prop];
         // first bet is the reply; the rest go out as follow-ups (no extra bot permissions needed)
@@ -155,7 +160,7 @@ export async function gameCommand(i, env, ctx) {
         return { type: 4, data: propMessage(props[0], 0) };
       }
       if (sub.name === "cancel") {
-        const r = await g.cancel(o.id);
+        const r = await g.cancel(o.id, uid, isMod);
         if (r.error) return err(r.error);
         ctx.waitUntil(g.announce(r.prop, r.players));
         return err(`Bet #${o.id} cancelled. ${r.players.length} entr${r.players.length === 1 ? "y" : "ies"} refunded.`);

@@ -45,7 +45,7 @@ COMMANDS = [
          {"name": "Thin", "value": "thin"}, {"name": "Medium", "value": "med"}, {"name": "Large", "value": "large"}]}]},
     {"name": "ram", "description": "Show a ram", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose ram", "required": False}]},
-    {"name": "prop", "description": "Prop bets (admins)", "type": 1, "contexts": [0], "default_member_permissions": "32",
+    {"name": "prop", "description": "Prop bets: post one, post the Rams set, or a random one", "type": 1, "contexts": [0],
      "options": [
          {"type": 1, "name": "create", "description": "Post a bet on a player you pick. The line comes from Sleeper unless you set a harder one.", "options": [
              {"type": 3, "name": "player", "description": "Player name as ESPN shows it, e.g. Puka Nacua", "required": True},
@@ -57,7 +57,7 @@ COMMANDS = [
              {"type": 4, "name": "minutes", "description": "Close entries in N minutes (default: at kickoff)", "required": False, "min_value": 1, "max_value": 240}]},
          {"type": 1, "name": "auto", "description": "Post this week's Rams bets (lines from Sleeper). Game days after this post here on their own."},
          {"type": 1, "name": "random", "description": "Post a totally random bet: any team, any player, any stat"},
-         {"type": 1, "name": "cancel", "description": "Cancel a bet and refund everyone", "options": [
+         {"type": 1, "name": "cancel", "description": "Cancel a bet you posted (mods: any bet) and refund everyone", "options": [
              {"type": 4, "name": "id", "description": "Bet number", "required": True}]},
          {"type": 1, "name": "check", "description": "Check ESPN now and settle any finished bets"}]},
 ]
