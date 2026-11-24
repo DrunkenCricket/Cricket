@@ -3,7 +3,7 @@
 // backup; the scripts skip anything already done, so a double start is harmless.
 //
 //   Monday 11:00 PM PT   pick'em: log last week's picks
-//   Tuesday 12:00 PM PT  pick'em: scorecard, then the new week a minute later
+//   Tuesday 6:00 AM PT   pick'em: scorecard, then the new week a minute later
 //   Kickoff - 60 min     game day lineup
 
 const REPO = "DrunkenCricket/Cricket";
@@ -51,7 +51,7 @@ async function ramsKickoff(pt) {
 
 export async function runTimer(now, env) {
   const pt = pacific(now);
-  if (pt.minute === 0 && ((pt.weekday === "Mon" && pt.hour === 23) || (pt.weekday === "Tue" && pt.hour === 12))) {
+  if (pt.minute === 0 && ((pt.weekday === "Mon" && pt.hour === 23) || (pt.weekday === "Tue" && pt.hour === 6))) {
     await dispatch(env, "pickem.yml");
   }
   // Ram game: award pick points and settle prop bets (every 2 minutes).

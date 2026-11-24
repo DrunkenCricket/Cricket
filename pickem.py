@@ -2,8 +2,8 @@
 """Post a Discord poll for every NFL game this week (Tue-Mon). Rams game first.
 Each poll closes at (or just before) kickoff.
 
-Every Tuesday at noon PT it fetches the new week, and only if games come back does it
-delete last week's polls and post the new ones. Failed runs retry hourly until 3 PM PT.
+Every Tuesday at 6 AM PT it fetches the new week, and only if games come back does it
+delete last week's polls and post the new ones. Failed runs retry hourly until 11 AM PT.
 Message ids are kept in state/pickem.json (committed back by the workflow).
 
 Before clearing last week's polls, it grades them (needs the DISCORD_BOT_TOKEN secret),
@@ -235,18 +235,18 @@ def main():
     now = datetime.now(nw.PT)
     week_start = nw.week_range(now)[0].isoformat()
     # Monday 11 PM PT run (06:00/07:00 UTC Tuesday, covering PDT and PST): log last
-    # week's picks only. Tuesday noon then posts the scorecard and the new week.
+    # week's picks only. Tuesday 6 AM then posts the scorecard and the new week.
     if SCHEDULED and ((now.weekday() == 0 and now.hour >= 23) or (now.weekday() == 1 and now.hour < 6)):
         grading.grade_week(load_state())
         return
     if SCHEDULED and now.weekday() == 0:
         print(f"{now:%a %H:%M} PT, before 11 PM. Skipping.")
         return
-    # Cron fires hourly 19:00-23:00 UTC on Tuesdays. The first run at or after noon PT
+    # Cron fires hourly 13:00-18:00 UTC on Tuesdays. The first run at or after 6 AM PT
     # posts; later runs retry only if that one failed.
     if SCHEDULED:
-        if now.hour < 12:
-            print(f"{now:%H:%M} PT, before noon. Skipping.")
+        if now.hour < 6:
+            print(f"{now:%H:%M} PT, before 6 AM. Skipping.")
             return
         if load_state().get("week_start") == week_start:
             print(f"Already posted for the week of {week_start}.")
