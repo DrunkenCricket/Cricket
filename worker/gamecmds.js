@@ -199,11 +199,11 @@ function crateReply(r, uid) {
   const it = r.item;
   const lines = [
     `<@${uid}> ${r.bought ? `bought a crate (${CRATE_COST} RUTS) and pulled:` : "opened a crate and pulled:"}`,
-    r.guaranteed ? (it.slot === "base" ? "*First crate: a brand-new look.*" : "*Guaranteed drop!*") : "",
+    r.guaranteed ? (it.slot === "base" ? "*First crate: a brand-new look.*" : "*Guaranteed drop!*") : r.pity ? "*🎯 10th crate: guaranteed Rare or better!*" : "",
     `# ${it.name}`,
     `**${rarityName(it)}** ${SLOT_NAMES[it.slot] || it.slot}`,
     r.dupe ? `Already had it, so they got **+${r.refund} RUTS** back.` : "",
-    `\n💰 ${r.user.points} RUTS  •  📦 ${r.user.crates} crate${r.user.crates === 1 ? "" : "s"} left`,
+    `\n💰 ${r.user.points} RUTS  •  📦 ${r.user.crates} crate${r.user.crates === 1 ? "" : "s"} left  •  🎯 Rare+ in ${10 - (r.user.opened % 10)}`,
   ].filter(Boolean);
   const buttons = [];
   if (!r.dupe) buttons.push({ type: 2, style: 1, custom_id: `equip:${it.id}`, label: "Equip it" });

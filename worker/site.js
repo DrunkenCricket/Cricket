@@ -394,7 +394,7 @@ async function call(op, extra) {
   return d;
 }
 function draw() {
-  $("sub").innerHTML = h(S.name || "Your ram") + " · <b>" + S.points + " RUTS</b> · " + S.crates + " crate" + (S.crates === 1 ? "" : "s") + " waiting · " + S.items.length + " items";
+  $("sub").innerHTML = h(S.name || "Your ram") + " · <b>" + S.points + " RUTS</b> · " + S.crates + " crate" + (S.crates === 1 ? "" : "s") + " waiting · " + S.items.length + " items · 🎯 Rare+ in " + (10 - (S.opened % 10)) + (10 - (S.opened % 10) === 1 ? " crate" : " crates");
   $("bodies").innerHTML = Object.entries(M.bodies).map(([k, n]) => '<button data-b="' + k + '" class="' + ((S.look.body || "med") === k ? "on" : "") + '">' + n + "</button>").join(" ");
   const b = $("buy");
   if (!busy) { b.textContent = S.crates > 0 ? "📦 Open crate (" + S.crates + ")" : "📦 Buy crate · " + M.cost + " RUTS"; b.disabled = S.crates < 1 && S.points < M.cost; }

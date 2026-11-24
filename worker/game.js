@@ -2,7 +2,8 @@
 //
 // Points:  +5 for every pick'em vote, +10 more when it's right (from data/picks.csv, Week 12 of 2026 onward).
 //          Each finished week: most correct picks wins a crate; 2nd and 3rd place get 20 RUTS. Ties share.
-// Crates:  60 points each. Everyone starts with one free crate, and their first crate is always the Girl Ram.
+// Crates:  every 10th crate a player opens is guaranteed Rare or better.
+//          60 points each. Everyone starts with one free crate, and their first crate is always the Girl Ram.
 //          Duplicates refund points by rarity.
 // Props:   admins post "PLAYER gets N+ STAT". Entry costs 20 points; a hit wins a crate.
 //          Results come from ESPN's live box score, so a prop can pay out mid-game the moment it hits.
@@ -295,10 +296,12 @@ export class Game extends DurableObject {
     const next = FIRST_CRATE.find((id) => !owned.has(id));   // girl ram first, then the nose ring, for everyone
     if (next) return { id: next, guaranteed: true };
     if (rand(UNCANNY_ODDS) === 0) return { id: "finish_uncanny" };
-    const tiers = Object.entries(RARITY).filter(([k]) => POOL[k]?.length);
+    // Every 10th crate a player opens is Rare or better (same odds between the rare+ tiers).
+    const pity = (u.opened + 1) % 10 === 0;
+    const tiers = Object.entries(RARITY).filter(([k]) => POOL[k]?.length && !(pity && k === "common"));
     let r = rand(tiers.reduce((s, [, v]) => s + v.weight, 0));
     for (const [k, v] of tiers) {
-      if ((r -= v.weight) < 0) return { id: POOL[k][rand(POOL[k].length)] };
+      if ((r -= v.weight) < 0) return { id: POOL[k][rand(POOL[k].length)], pity };
     }
   }
 
@@ -313,7 +316,7 @@ export class Game extends DurableObject {
       bought = true;
       u = this.one("SELECT * FROM users WHERE id=?", uid);
     }
-    const { id, guaranteed } = this.roll(uid, u);
+    const { id, guaranteed, pity } = this.roll(uid, u);
     const it = ITEMS[id];
     const dupe = this.owned(uid).has(id);
     this.sql.exec("UPDATE users SET crates = crates - 1, opened = opened + 1 WHERE id=?", uid);
@@ -324,7 +327,7 @@ export class Game extends DurableObject {
     } else {
       this.sql.exec("INSERT INTO items (user_id,item_id,ts) VALUES (?,?,?)", uid, id, Date.now());
     }
-    return { item: pub(it), dupe, refund, guaranteed, bought, user: this.one("SELECT * FROM users WHERE id=?", uid) };
+    return { item: pub(it), dupe, refund, guaranteed, pity, bought, user: this.one("SELECT * FROM users WHERE id=?", uid) };
   }
 
   equip(uid, itemId) {
