@@ -283,8 +283,10 @@ function render() {
     if (!week) return;
     if (week.error) { view.innerHTML = '<div class="empty">Couldn\\'t load this week: ' + esc(week.error) + '</div>'; return; }
     sub.textContent = (week.label || "This week") + " · live picks from Discord";
-    view.innerHTML = '<p class="note">Hover a face to see who picked it. Updates every couple of minutes.</p><div class="grid">'
-      + week.games.map((g) => card(g)).join("") + '</div>';
+    view.innerHTML = week.games.length
+      ? '<p class="note">Hover a face to see who picked it. Updates every couple of minutes.</p><div class="grid">'
+        + week.games.map((g) => card(g)).join("") + '</div>'
+      : '<div class="empty">This week\'s polls go up Tuesday at noon. Check Last Week and Standings in the meantime.</div>';
   } else if (tab === "last") {
     if (!hist) return;
     sub.textContent = (hist.label || "No graded weeks yet") + " · results";
