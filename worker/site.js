@@ -300,6 +300,66 @@ const FIELD = `<div class="ez l"><b>RAMS</b></div><div class="ez r"><b>HERD</b><
   + Array.from({ length: 11 }, (_, i) => `<div class="yl" style="left:${8 + i * 8.4}%"></div>`).join("")
   + [10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, i) => `<div class="num" style="left:${16.4 + i * 8.4}%">${n}</div>`).join("");
 
+// ---------- The Lockeroom scene (1000 x 470): lockers with gear on the left, the shower in the back right ----------
+const SC_OUT = "#15172b";
+function lockerScene() {
+  const jersey = (x, y, c, num, trim) => `<g transform="translate(${x} ${y})">
+    <path d="M -9 -4 Q 0 -14 9 -4" stroke="#9aa3b2" stroke-width="3" fill="none"/>
+    <path d="M -30 2 L -14 -6 L 14 -6 L 30 2 L 24 18 L 17 14 L 17 58 L -17 58 L -17 14 L -24 18 Z" fill="${c}" stroke="${SC_OUT}" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M -9 -6 L 0 4 L 9 -6" fill="none" stroke="${trim}" stroke-width="3"/>
+    <text x="0" y="40" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="22" fill="${trim}">${num}</text></g>`;
+  const helmet = (x, y, c, stripe) => `<g transform="translate(${x} ${y})">
+    <path d="M -24 8 C -26 -18, 22 -26, 26 2 L 26 10 L 6 10 L 6 2 L -8 2 L -10 10 Z" fill="${c}" stroke="${SC_OUT}" stroke-width="3"/>
+    <path d="M 0 -15 C 6 -12, 12 -8, 14 -2" stroke="${stripe}" stroke-width="4" fill="none"/>
+    <path d="M 8 4 L 30 4 M 8 9 L 30 9 M 30 2 L 30 12" stroke="#cfd6e0" stroke-width="2.5"/></g>`;
+  const cleats = (x, y, c) => `<g transform="translate(${x} ${y})">${[0, 22].map((d) => `<path d="M ${d - 10} 0 C ${d - 10} -9, ${d + 2} -9, ${d + 12} -2 L ${d + 12} 2 L ${d - 10} 2 Z" fill="${c}" stroke="${SC_OUT}" stroke-width="2"/>`).join("")}</g>`;
+  const photo = (x, y, rot, inner, art) => `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="-14" y="-16" width="28" height="32" fill="#f4f1ea" stroke="#0004"/>
+    <rect x="-11" y="-13" width="22" height="20" fill="${inner}"/>${art}<rect x="-6" y="-20" width="12" height="6" fill="#fff8" transform="rotate(${-rot})"/></g>`;
+  const ramPic = `<circle cx="0" cy="-2" r="5" fill="#f4ecd8"/><path d="M -5 -5 q -6 -2 -5 4 M 5 -5 q 6 -2 5 4" stroke="#c8a46a" stroke-width="2" fill="none"/>`;
+  const ballPic = `<ellipse cx="0" cy="-3" rx="7" ry="4.5" fill="#8b4a22"/><path d="M -3 -3 L 3 -3" stroke="#fff" stroke-width="1"/>`;
+  const trophyPic = `<path d="M -4 -8 L 4 -8 L 3 -2 L -3 -2 Z M -1 -2 L 1 -2 L 1 2 L -1 2 Z" fill="#ffc82c"/>`;
+  const W = 96, N = 7;
+  const lockers = Array.from({ length: N }, (_, i) => {
+    const x = 8 + i * W, open = i % 3 !== 1;
+    const nums = [12, 99, 7, 24, 33, 81, 10], c = i % 2 ? "#ffc82c" : "#003594", trim = i % 2 ? "#003594" : "#ffc82c";
+    const frame = `<rect x="${x}" y="40" width="${W - 6}" height="290" fill="#0a2560" stroke="${SC_OUT}" stroke-width="3"/>
+      <rect x="${x + 18}" y="46" width="${W - 42}" height="16" rx="3" fill="#cfd6e0"/><text x="${x + (W - 6) / 2}" y="58" text-anchor="middle" font-family="system-ui" font-weight="800" font-size="12" fill="#003594">${nums[i]}</text>`;
+    if (!open) return frame + `<rect x="${x + 6}" y="68" width="${W - 18}" height="256" rx="3" fill="#123a8f" stroke="${SC_OUT}" stroke-width="2"/>
+      ${[0, 1, 2, 3, 4].map((k) => `<rect x="${x + 22}" y="${80 + k * 8}" width="${W - 50}" height="3" fill="#0a2560"/>`).join("")}
+      <rect x="${x + W - 26}" y="180" width="6" height="26" rx="2" fill="#cfd6e0"/>
+      ${photo(x + 30, 150, -6, "#7fd0ff", ramPic)}${photo(x + 58, 168, 5, "#2f8f3c", ballPic)}${photo(x + 32, 214, 3, "#3b1d6e", trophyPic)}`;
+    return frame + `<rect x="${x + 6}" y="68" width="${W - 18}" height="256" fill="#06153a"/>
+      <rect x="${x + 6}" y="110" width="${W - 18}" height="5" fill="#26315f"/>
+      ${helmet(x + 44, 96, i === 3 ? "#ffc82c" : "#003594", i === 3 ? "#003594" : "#ffc82c")}
+      ${jersey(x + 45, 140, c, nums[i], trim)}
+      ${photo(x + 74, 136, 8, "#ff9ccf", ramPic)}
+      ${cleats(x + 33, 316, i % 2 ? "#ffc82c" : "#f5f5f2")}`;
+  }).join("");
+  const tiles = `<pattern id="tile" width="22" height="22" patternUnits="userSpaceOnUse"><rect width="22" height="22" fill="#dfe9f2"/><path d="M 22 0 L 0 0 0 22" fill="none" stroke="#b9c8d6" stroke-width="2"/></pattern>
+    <pattern id="tile2" width="22" height="22" patternUnits="userSpaceOnUse"><rect width="22" height="22" fill="#c9dbe9"/><path d="M 22 0 L 0 0 0 22" fill="none" stroke="#a3b8ca" stroke-width="2"/></pattern>`;
+  const heads = [760, 880].map((x) => `<path d="M ${x + 20} 40 L ${x + 20} 70 L ${x} 70" fill="none" stroke="#9aa3b2" stroke-width="6"/><path d="M ${x - 14} 66 L ${x + 10} 66 L ${x + 6} 78 L ${x - 10} 78 Z" fill="#cfd6e0" stroke="${SC_OUT}" stroke-width="2"/>
+    ${Array.from({ length: 7 }, (_, k) => `<path class="drip" d="M ${x - 9 + k * 3} 80 L ${x - 22 + k * 7} 300" stroke="#7fd0ff" stroke-width="2" stroke-dasharray="6 14" opacity=".7" style="animation-delay:-${(k * 0.13).toFixed(2)}s"/>`).join("")}`).join("");
+  return `<svg class="scene" viewBox="0 0 1000 470" preserveAspectRatio="xMinYMax slice" aria-hidden="true"><defs>${tiles}</defs>
+    <rect width="1000" height="470" fill="#0b1f52"/>
+    <rect x="0" y="0" width="690" height="34" fill="#0a1a40"/><rect x="0" y="30" width="690" height="8" fill="#ffc82c"/>
+    ${lockers}
+    <rect x="690" y="0" width="310" height="340" fill="url(#tile)"/><rect x="690" y="0" width="10" height="340" fill="#9aa3b2"/>
+    ${heads}
+    <rect x="0" y="330" width="1000" height="140" fill="#2a2f3d"/><rect x="690" y="330" width="310" height="140" fill="url(#tile2)"/>
+    <rect x="0" y="330" width="690" height="6" fill="#1c2030"/>
+  </svg>`;
+}
+// Drawn in front of the showering rams: the half wall, the curtain rod, steam, and the bench.
+function lockerFront() {
+  return `<svg class="scene front" viewBox="0 0 1000 470" preserveAspectRatio="xMinYMax slice" aria-hidden="true">
+    <rect x="700" y="262" width="300" height="80" fill="url(#tile)" stroke="#9aa3b2" stroke-width="4"/><rect x="700" y="256" width="300" height="10" fill="#cfd6e0"/>
+    <path d="M 700 20 L 1000 20" stroke="#9aa3b2" stroke-width="5"/>
+    <path d="M 700 22 C 712 120, 690 200, 706 262 L 730 262 C 718 200, 738 120, 724 22 Z" fill="#ffc82c" opacity=".9" stroke="#15172b" stroke-width="2"/>
+    ${[[780, 150, 70], [880, 120, 90], [940, 190, 60], [820, 220, 80]].map(([x, y, r], k) => `<ellipse class="steam" cx="${x}" cy="${y}" rx="${r}" ry="${r * 0.5}" fill="#fff" style="animation-delay:-${k * 1.7}s"/>`).join("")}
+    <rect x="40" y="350" width="620" height="16" rx="6" fill="#a8703f" stroke="#15172b" stroke-width="3"/><rect x="70" y="366" width="12" height="34" fill="#6b4423"/><rect x="618" y="366" width="12" height="34" fill="#6b4423"/>
+  </svg>`;
+}
+
 function lockerPage() {
   const meta = {
     slots: SLOT_NAMES, bodies: BODY_TYPES, cost: CRATE_COST, defaults: DEFAULT_LOOK,
@@ -316,19 +376,17 @@ main{max-width:1100px;margin:0 auto}
 h1{margin:0;font:900 clamp(24px,5vw,40px)/1 system-ui,sans-serif;letter-spacing:2px}h1 span{color:var(--gold)}
 .sub{color:var(--dim);margin:6px 0 14px}.sub b{color:var(--gold)}
 /* the room: a wall of lockers, a bench, a floor */
-.room{position:relative;height:min(62vw,470px);min-height:330px;border-radius:18px;overflow:hidden;border:1px solid var(--line);
-  background:linear-gradient(#0000 0 74%,#5a3b22 74% 77%,#3b2716 77% 78%,#2a2f3d 78%),
-  repeating-linear-gradient(90deg,#123a8f 0 calc(12.5% - 6px),#0a2560 calc(12.5% - 6px) 12.5%)}
-.room::before{content:"";position:absolute;inset:0 0 26% 0;background:
-  repeating-linear-gradient(90deg,#0000 0 3%,rgba(0,0,0,.35) 3% 3.4%,#0000 3.4% 12.5%) 0 14%/100% 8% no-repeat,
-  repeating-linear-gradient(#0000 0 6px,rgba(0,0,0,.28) 6px 9px) 2% 12%/7% 10% repeat-x,
-  linear-gradient(90deg,#0000 0 9.6%,#c9d3ea 9.6% 10.4%,#0000 10.4%) 0 48%/12.5% 12% repeat-x}
-.room::after{content:"";position:absolute;left:0;right:0;top:0;height:7%;background:linear-gradient(#0a1a40,#123a8f);box-shadow:0 4px 10px rgba(0,0,0,.5)}
-.bench{position:absolute;left:6%;right:6%;bottom:24%;height:4%;background:#a8703f;border-radius:6px;box-shadow:0 6px 0 #6b4423}
-.nums{position:absolute;left:0;right:0;top:9%;display:grid;grid-template-columns:repeat(8,1fr);text-align:center;font:800 13px system-ui;color:var(--gold);opacity:.85}
+.room{position:relative;height:min(62vw,470px);min-height:330px;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:#0b1f52}
+.room .scene{position:absolute;inset:0;width:100%;height:100%}.room .scene.front{z-index:2;pointer-events:none}
+.room .drip{animation:drip .5s linear infinite}@keyframes drip{to{stroke-dashoffset:-40}}
+.room .steam{opacity:.18;animation:steam 7s ease-in-out infinite}@keyframes steam{0%,100%{transform:translateY(0);opacity:.12}50%{transform:translateY(-24px);opacity:.3}}
+.showerram{position:absolute;width:min(17vw,150px);z-index:1;transform:translateX(-50%)}
+.showerram img{width:100%;display:block;animation:sway 3.4s ease-in-out infinite}@keyframes sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+.bub{position:absolute;border:2px solid #fffc;border-radius:50%;z-index:3;animation:bub 4s linear infinite;pointer-events:none}
+@keyframes bub{from{transform:translateY(0);opacity:.9}to{transform:translateY(-120px);opacity:0}}
 .lr-ram{position:absolute;bottom:6%;left:30%;width:min(34vw,280px);transform:translateX(-50%);z-index:12}
 .lr-ram img{width:100%;display:block;transform-origin:50% 90%}
-.crate{position:absolute;bottom:9%;left:70%;width:min(20vw,160px);transform:translateX(-50%);z-index:3}
+.crate{position:absolute;bottom:9%;left:58%;width:min(20vw,160px);transform:translateX(-50%);z-index:4}
 .crate svg{width:100%;display:block}.crate .lid{transform-box:fill-box;transform-origin:0% 100%}
 .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8}
 .word{position:absolute;left:58%;top:22%;transform:translateX(-50%);z-index:9;font:900 clamp(28px,6vw,60px)/1 system-ui;color:#ffd400;-webkit-text-stroke:3px #15172b;opacity:0;pointer-events:none}
@@ -357,7 +415,7 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 .err{color:#ff8080}.empty{color:var(--dim);padding:24px;text-align:center}a{color:var(--gold)}
 </style></head>
 <body><main><h1>THE <span>LOCKEROOM</span></h1><div class="sub" id="sub">Loading...</div>
-<div class="room" id="room"><div class="nums">${[12, 99, 7, 24, 33, 81, 10, 2].map((n) => `<span>${n}</span>`).join("")}</div><div class="bench"></div>
+<div class="room" id="room">${lockerScene()}<div id="showers"></div>${lockerFront()}
 <div class="lr-ram" id="ram"><img alt="Your ram"></div>
 <div class="crate" id="crate"><svg viewBox="0 0 120 110"><g class="lid"><rect x="4" y="14" width="112" height="20" rx="4" fill="#0a2560" stroke="#15172b" stroke-width="4"/><rect x="4" y="14" width="112" height="6" fill="#ffc82c"/></g>
 <rect x="8" y="32" width="104" height="72" rx="6" fill="#123a8f" stroke="#15172b" stroke-width="4"/><path d="M8 32 L112 104 M112 32 L8 104" stroke="#0a2560" stroke-width="8"/>
@@ -432,13 +490,13 @@ async function unbox() {
   // 1. headbutt the crate
   await ramEl.animate([{ left: "30%" }, { left: "20%" }], { duration: 380, easing: "ease-out", fill: "forwards" }).finished;
   img.animate([{ transform: "rotate(0)" }, { transform: "rotate(14deg)" }], { duration: 200, fill: "forwards" });
-  await ramEl.animate([{ left: "20%" }, { left: "52%" }], { duration: 300, easing: "cubic-bezier(.5,0,1,1)", fill: "forwards" }).finished;
+  await ramEl.animate([{ left: "20%" }, { left: "44%" }], { duration: 300, easing: "cubic-bezier(.5,0,1,1)", fill: "forwards" }).finished;
   $("flash").animate([{ opacity: .8 }, { opacity: 0 }], { duration: 250 });
   $("word").animate([{ opacity: 0, transform: "translateX(-50%) scale(.4)" }, { opacity: 1, transform: "translateX(-50%) scale(1.2)", offset: .3 }, { opacity: 0, transform: "translateX(-50%) scale(1)" }], { duration: 700 });
   $("room").animate([{ transform: "translate(0)" }, { transform: "translate(-8px,4px)" }, { transform: "translate(7px,-4px)" }, { transform: "translate(0)" }], { duration: 240 });
   crate.querySelector(".lid").animate([{ transform: "translate(0,0) rotate(0)" }, { transform: "translate(30px,-60px) rotate(-50deg)", opacity: 0 }], { duration: 600, fill: "forwards" });
   crate.animate([{ transform: "translateX(-50%) scale(1)" }, { transform: "translateX(-50%) scale(1.15,.85)" }, { transform: "translateX(-50%) scale(1)" }], { duration: 300 });
-  ramEl.animate([{ left: "52%" }, { left: "30%" }], { duration: 450, easing: "ease-out", fill: "forwards" });
+  ramEl.animate([{ left: "44%" }, { left: "30%" }], { duration: 450, easing: "ease-out", fill: "forwards" });
   img.animate([{ transform: "rotate(14deg)" }, { transform: "rotate(0)" }], { duration: 300, fill: "forwards" });
   const d = await reqP;
   if (!d.reveal) { busy = false; crate.querySelector(".lid").getAnimations().forEach((a) => a.cancel()); draw(); return; }
@@ -483,6 +541,12 @@ document.addEventListener("click", (e) => {
   else if (t.dataset.f) { filter = t.dataset.f; draw(); }
   else if (t.dataset.i) t.classList.contains("on") ? call("unequip", { slot: t.dataset.s }) : call("equip", { item: t.dataset.i });
 });
+// Two random rams from the herd hit the showers in the back.
+fetch("/api/herd").then((r) => r.json()).then((d) => {
+  const pool = (d.rams || []).filter((r) => !S || r.id !== S.uid).sort(() => Math.random() - 0.5).slice(0, 2);
+  $("showers").innerHTML = pool.map((r, k) => '<div class="showerram" style="left:' + (k ? 89 : 76) + '%;bottom:' + (k ? 41 : 39) + '%"><img alt="" src="/ram/' + r.id + '/bare~0.svg" style="animation-delay:-' + k * 1.3 + 's"></div>').join("")
+    + Array.from({ length: 6 }, (_, k) => '<i class="bub" style="left:' + (72 + k * 4.5) + '%;bottom:' + (42 + (k % 3) * 4) + '%;width:' + (6 + k % 3 * 4) + 'px;height:' + (6 + k % 3 * 4) + 'px;animation-delay:-' + k * 0.7 + 's"></i>').join("");
+}).catch(() => {});
 if (!T) {
   $("sub").innerHTML = "Locked. Type <b>/lockeroom</b> in Discord and click the button to get in. Your key works for 2 hours in this browser.";
   $("buy").disabled = true; $("buy").textContent = "🔒 Run /lockeroom in Discord";
