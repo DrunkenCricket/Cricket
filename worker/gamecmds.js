@@ -6,7 +6,7 @@ import { CRATE_COST, PICK_POINTS, PROP_COST, FIGHT_STAKE, STATS, propMessage, sh
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
-export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom"]);
+export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts"]);
 
 const game = (env) => env.GAME.get(env.GAME.idFromName("main"));
 const who = (i) => i.member?.user || i.user;
@@ -84,6 +84,18 @@ export async function gameCommand(i, env, ctx) {
       const link = `${SITE}/lockeroom#t=${await lockerToken(env, uid)}`;
       return msg({ content: "🎒 **The Lockeroom**: unbox crates, buy more with RUTS, and dress your ram. This link is just for you and works for 2 hours.",
         components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Enter the Lockeroom", emoji: { name: "🎒" } }] }] }, true);
+    }
+
+    case "giveruts": {
+      // Discord hides this command from non-mods; double-check here too (Administrator, Manage Server or Timeout Members).
+      const perms = BigInt(i.member?.permissions || 0);
+      if (!(perms & 8n) && !(perms & 32n) && !(perms & (1n << 40n))) return err("Only mods can give RUTS.");
+      const to = opt(i, "user"), amount = opt(i, "amount"), reason = opt(i, "reason");
+      const u = i.data.resolved?.users?.[to];
+      if (u?.bot) return err("Bots don't have rams.");
+      const r = await g.give(to, u ? nameOf(u) : undefined, amount, reason ? `${reason} (from ${name})` : `From ${name}`);
+      const verb = r.delta >= 0 ? `gave <@${to}> **${r.delta} RUTS**` : `took **${-r.delta} RUTS** from <@${to}>`;
+      return { type: 4, data: { content: `🎁 <@${uid}> ${verb}${reason ? `: ${reason}` : ""}. They have **${r.points}** now.`, allowed_mentions: { users: [to] } } };
     }
 
     case "fight": {

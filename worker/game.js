@@ -435,6 +435,13 @@ export class Game extends DurableObject {
     }
   }
 
+  /** Mod gift or fine. A fine can't take anyone below zero. */
+  give(uid, name, amount, reason) {
+    const u = this.user(uid, name);
+    const delta = Math.max(-u.points, Math.trunc(amount));
+    this.pay(`give:${crypto.randomUUID()}`, uid, delta, reason || (delta >= 0 ? "Gift from a mod" : "Fined by a mod"));
+    return { delta, points: u.points + delta };
+  }
   setPropsChannel(ch) { this.meta("propsChannel", ch); }
   async saveMessage(propId, channelId, messageId) {
     this.sql.exec("UPDATE props SET channel_id=?, message_id=? WHERE id=? AND message_id IS NULL", channelId, messageId, propId);

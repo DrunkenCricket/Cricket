@@ -18,6 +18,11 @@ COMMANDS = [
     {"name": "ruts", "description": "Your RUTS, crates and the RUTS leaderboard", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose RUTS to show", "required": False}]},
     {"name": "lockeroom", "description": "The Lockeroom: unbox crates, shop with RUTS and dress your ram on the website", "type": 1, "contexts": [0]},
+    {"name": "giveruts", "description": "Mods: give someone RUTS (or a negative number to take some)", "type": 1, "contexts": [0],
+     "default_member_permissions": str(1 << 40),   # Timeout Members: mods have it; server settings can change who sees this
+     "options": [{"type": 6, "name": "user", "description": "Who gets them", "required": True},
+                 {"type": 4, "name": "amount", "description": "How many (negative takes RUTS away)", "required": True, "min_value": -10000, "max_value": 10000},
+                 {"type": 3, "name": "reason", "description": "Shown in the message and their history", "required": False, "max_length": 100}]},
     {"name": "fight", "description": "Challenge someone's ram: 50 RUTS each, winner takes all", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "opponent", "description": "Who to fight", "required": True}]},
     {"name": "crate", "description": "Open a crate (your first one is free, then 60 RUTS)", "type": 1, "contexts": [0]},
