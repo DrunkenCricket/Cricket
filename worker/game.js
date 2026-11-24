@@ -319,7 +319,22 @@ export class Game extends DurableObject {
   }
   fight(id) { return this.one("SELECT * FROM fights WHERE id=?", id); }
 
+  /** One-time gift to every ram owner and everyone who has ever made a pick. Each key pays once. */
+  async grantOnce(tag, amount, reason) {
+    if (this.meta(`grant:${tag}`)) return 0;
+    const res = await fetch(CSV_URL, { cf: { cacheTtl: 60 } });
+    if (!res.ok) return 0;
+    const [head, ...rows] = (await res.text()).trim().split(/\r?\n/).map(splitCSV);
+    const iu = head.indexOf("user_id"), inm = head.indexOf("user_name");
+    for (const r of rows) if (r[iu]) this.user(r[iu], r[inm]);
+    let n = 0;
+    for (const { id } of this.all("SELECT id FROM users")) if (this.pay(`grant:${tag}:${id}`, id, amount, reason)) n++;
+    this.meta(`grant:${tag}`, Date.now());
+    return n;
+  }
+
   async tick() {
+    await this.grantOnce("launch50", 50, "Welcome gift");
     for (const f of this.all("SELECT * FROM fights WHERE status='pending' AND created < ?", Date.now() - FIGHT_TTL)) this.endFight(f, "expired");
     await this.syncPicks();
     const n = await this.resolveProps();
