@@ -5,7 +5,7 @@
 //
 // Needs the DISCORD_BOT_TOKEN Worker secret to read poll voters, avatars and logo emojis.
 
-import { renderRam, ITEMS, SLOT_NAMES, RARITY, BODY_TYPES } from "./ram.js";
+import { renderRam, ITEMS, SLOT_NAMES, RARITY, BODY_TYPES, DEFAULT_LOOK } from "./ram.js";
 import { lockerUser } from "./gamecmds.js";
 import { CRATE_COST } from "./game.js";
 
@@ -289,10 +289,11 @@ const FIELD = `<div class="ez l"><b>RAMS</b></div><div class="ez r"><b>HERD</b><
 
 function lockerPage() {
   const meta = {
-    slots: SLOT_NAMES, bodies: BODY_TYPES, cost: CRATE_COST,
+    slots: SLOT_NAMES, bodies: BODY_TYPES, cost: CRATE_COST, defaults: DEFAULT_LOOK,
     rarity: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, { label: v.label, weight: v.weight, color: "#" + v.color.toString(16).padStart(6, "0") }])),
     // every crate item, for the spinning reel
-    items: Object.values(ITEMS).filter((i) => i.slot !== "base" && i.rarity !== "secret").map((i) => [i.id, i.name, i.slot, i.rarity]),
+    // the whole catalog (the secret finish stays hidden until someone owns it); [id, name, slot, rarity, starter]
+    items: Object.values(ITEMS).filter((i) => i.rarity !== "secret").map((i) => [i.id, i.name, i.slot, i.rarity, i.starter ? 1 : 0]),
   };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Lockeroom</title><meta name="robots" content="noindex">
@@ -339,6 +340,7 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
 .it{text-align:left;padding:10px;border-left-width:4px}.it small{display:block;color:var(--dim);font-weight:500;margin-top:2px}
 .it.on{background:#24305f;box-shadow:inset 0 0 0 1px var(--gold)}.it.on::after{content:" ✓";color:var(--gold)}
+.it.locked{opacity:.4;cursor:default;filter:grayscale(.6)}.chips small{color:var(--dim);font-weight:500}
 .err{color:#ff8080}.empty{color:var(--dim);padding:24px;text-align:center}a{color:var(--gold)}
 </style></head>
 <body><main><h1>THE <span>LOCKEROOM</span></h1><div class="sub" id="sub">Loading...</div>
@@ -367,6 +369,7 @@ if (T && !location.hash) history.replaceState(null, "", "#t=" + T);
 const ICON = { fleece: "🧶", horns: "🐏", shirt: "👕", head: "🧢", eyes: "🕶️", mouth: "😁", neck: "📿", hand: "🏈", feet: "👟", gear: "🛡️", tattoo: "💉", marks: "🩹", bg: "🏟️", finish: "✨", pose: "🙌", body: "💪" };
 const h = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const $ = (id) => document.getElementById(id);
+const SLOT = Object.assign({}, M.slots, { neck: "Neck & Scarves", head: "Hats", hand: "In Hand", feet: "Shoes", bg: "Background", body: "Body" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let S = null, filter = "all", busy = false;
 const ramSrc = (opt) => "/ram/" + S.uid + "/" + (opt ? opt + "-bare" : "bare") + "~" + Date.now() + ".svg";
@@ -382,20 +385,28 @@ function draw() {
   $("bodies").innerHTML = Object.entries(M.bodies).map(([k, n]) => '<button data-b="' + k + '" class="' + ((S.look.body || "med") === k ? "on" : "") + '">' + n + "</button>").join(" ");
   const b = $("buy");
   if (!busy) { b.textContent = S.crates > 0 ? "📦 Open crate (" + S.crates + ")" : "📦 Buy crate · " + M.cost + " RUTS"; b.disabled = S.crates < 1 && S.points < M.cost; }
-  const slots = [...new Set(S.items.map((i) => i.slot))];
-  $("chips").innerHTML = ['<button data-f="all" class="' + (filter === "all" ? "on" : "") + '">All</button>'].concat(slots.map((sl) =>
-    '<button data-f="' + sl + '" class="' + (filter === sl ? "on" : "") + '">' + (ICON[sl] || "") + " " + h(M.slots[sl] || sl) + "</button>")).join("");
-  const list = S.items.filter((i) => filter === "all" || i.slot === filter);
-  $("grid").innerHTML = list.length ? list.map((i) => {
-    const r = M.rarity[i.rarity] || { label: "Secret", color: "#5ee08f" }, on = S.look[i.slot] === i.id || (i.slot === "body" && S.look.body === i.id);
-    return '<button class="it' + (on ? " on" : "") + '" data-i="' + i.id + '" data-s="' + i.slot + '" style="border-left-color:' + r.color + '">' + (ICON[i.slot] || "") + " " + h(i.name)
-      + '<small><span style="color:' + r.color + '">' + r.label + "</span> · " + h(M.slots[i.slot] || i.slot) + "</small></button>";
+  // Wardrobe: every section, every option. Owned items wear on click; locked ones show what's out there.
+  const owned = new Set(S.items.map((i) => i.id).concat(M.items.filter((i) => i[4]).map((i) => i[0])));
+  const catalog = M.items.concat(S.items.filter((i) => !M.items.some((m) => m[0] === i.id)).map((i) => [i.id, i.name, i.slot, i.rarity, 0]));
+  const sections = Object.keys(M.slots).concat("body").filter((sl) => catalog.some((i) => i[2] === sl));
+  const count = (sl) => catalog.filter((i) => i[2] === sl && owned.has(i[0])).length + "/" + catalog.filter((i) => i[2] === sl).length;
+  $("chips").innerHTML = ['<button data-f="all" class="' + (filter === "all" ? "on" : "") + '">✅ Owned (' + owned.size + ")</button>"].concat(sections.map((sl) =>
+    '<button data-f="' + sl + '" class="' + (filter === sl ? "on" : "") + '">' + (ICON[sl] || "") + " " + h(SLOT[sl] || sl) + " <small>" + count(sl) + "</small></button>")).join("");
+  const order = { common: 0, rare: 1, epic: 2, legendary: 3, mythic: 4, secret: 5 };
+  const list = catalog.filter((i) => filter === "all" ? owned.has(i[0]) : i[2] === filter)
+    .sort((a, b) => (owned.has(b[0]) - owned.has(a[0])) || (order[a[3]] - order[b[3]]));
+  $("grid").innerHTML = list.length ? list.map(([id, name, slot, rarity]) => {
+    const r = M.rarity[rarity] || { label: "Secret", color: "#5ee08f" }, have = owned.has(id);
+    const on = slot === "body" ? S.look.body === id : S.look[slot] === id || (!S.look[slot] && M.defaults[slot] === id);
+    return '<button class="it' + (on ? " on" : "") + (have ? "" : " locked") + '"' + (have ? ' data-i="' + id + '" data-s="' + slot + '"' : " disabled")
+      + ' style="border-left-color:' + r.color + '">' + (have ? (ICON[slot] || "") : "🔒") + " " + h(name)
+      + '<small><span style="color:' + r.color + '">' + r.label + "</span> · " + h(SLOT[slot] || slot) + "</small></button>";
   }).join("") : '<div class="empty">Your locker is empty. Open a crate!</div>';
 }
 function randomItem() {
   const tiers = Object.entries(M.rarity); let x = Math.random() * tiers.reduce((s, [, v]) => s + v.weight, 0);
   let tier = tiers[0][0]; for (const [k, v] of tiers) { if ((x -= v.weight) < 0) { tier = k; break; } }
-  const pool = M.items.filter((i) => i[3] === tier); return pool[Math.floor(Math.random() * pool.length)];
+  const pool = M.items.filter((i) => i[3] === tier && i[2] !== "base" && !i[4]); return pool[Math.floor(Math.random() * pool.length)];
 }
 const cardHtml = (i, win) => { const r = M.rarity[i[3]] || { label: "Secret", color: "#5ee08f" };
   return '<div class="card' + (win ? " win-target" : "") + '" style="border-bottom-color:' + r.color + '"><div class="e">' + (ICON[i[2]] || "🎁") + '</div><div class="n">' + h(i[1]) + '</div><div class="r" style="color:' + r.color + '">' + r.label + "</div></div>"; };

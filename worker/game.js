@@ -62,7 +62,7 @@ const rarityLine = (it) => `${RARITY[it.rarity]?.label || "Secret"} ${SLOT_NAMES
 // Crate pool: everything except base looks (the girl base comes from the first crate) and the secret finish.
 const POOL = {};
 for (const it of Object.values(ITEMS)) {
-  if (it.slot === "base" || it.rarity === "secret") continue;
+  if (it.slot === "base" || it.rarity === "secret" || it.starter) continue;
   (POOL[it.rarity] ||= []).push(it.id);
 }
 

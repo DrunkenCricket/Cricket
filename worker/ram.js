@@ -85,6 +85,8 @@ export const FACES = { tan: "#d9b98a", brown: "#a87a4f", dark: "#3d3330", gray: 
 item("base_boy", "Boy Ram", "base", "common", { starter: true });
 item("base_girl", "Girl Ram", "base", "rare");
 export const FIRST_CRATE = ["base_girl"];
+// What every ram starts in. These are free for everyone and never come out of a crate.
+export const DEFAULT_LOOK = { base: "base_boy", fleece: "fleece_cream", horns: "horns_curl" };
 
 // ---------- FLEECE (~30) ----------
 const FLEECE_SOLIDS = [
@@ -502,6 +504,8 @@ item("finish_street", "Street Finish", "finish", "epic");
 item("finish_sticker", "Sticker Finish", "finish", "legendary");
 item("finish_holo", "Holo Sticker Finish", "finish", "mythic");
 item("finish_uncanny", "Uncanny Finish", "finish", "secret");   // never listed in odds
+
+for (const id of Object.values(DEFAULT_LOOK)) ITEMS[id].starter = true;
 
 export const SLOTS = ["base", "pose", "bg","fleece", "horns", "shirt", "head", "eyes", "mouth", "neck", "hand", "feet", "gear", "tattoo", "marks", "finish"];
 export const SLOT_NAMES = { base: "Base", pose: "Pose", bg: "Background", fleece: "Fleece", horns: "Horns", shirt: "Shirt", head: "Head", eyes: "Eyes", mouth: "Mouth",
