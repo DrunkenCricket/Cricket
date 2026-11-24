@@ -58,6 +58,77 @@ def post(payload):
         sys.exit(f"Discord {e.code}: {e.read().decode(errors='replace')}")
 
 
+# ---------- posting as the bot (needed for the team-logo emojis) ----------
+
+APP_ID = "1574684181361852416"
+API = "https://discord.com/api/v10"
+_bot = {"ok": None, "channel": None, "emojis": None}
+
+
+class BotError(Exception):
+    def __init__(self, code, text):
+        super().__init__(f"Discord {code}: {text}")
+        self.code = code
+
+
+def bot_call(method, path, payload=None):
+    body = json.dumps(payload).encode() if payload is not None else None
+    for _ in range(6):
+        req = urllib.request.Request(API + path, data=body, method=method, headers={
+            "Authorization": f"Bot {grading.TOKEN}", "Content-Type": "application/json",
+            "User-Agent": "DiscordBot (https://github.com/DrunkenCricket/Cricket, 1.0)"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                raw = r.read()
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            if e.code == 429:
+                time.sleep(float(json.loads(raw or b"{}").get("retry_after", 2)) + 0.5)
+                continue
+            raise BotError(e.code, raw.decode(errors="replace")[:200])
+    raise BotError(429, "rate limited")
+
+
+def pickem_channel():
+    if not _bot["channel"]:
+        _bot["channel"] = discord("GET").get("channel_id")  # the webhook knows its channel
+    return _bot["channel"]
+
+
+def team_emojis():
+    """Team code -> app emoji id (uploaded to the bot's Emojis tab as LAR, SEA, ...)."""
+    if _bot["emojis"] is None:
+        _bot["emojis"] = {}
+        if grading.TOKEN:
+            try:
+                items = bot_call("GET", f"/applications/{APP_ID}/emojis").get("items", [])
+                _bot["emojis"] = {e["name"].upper(): e["id"] for e in items}
+            except BotError as e:
+                print(f"Couldn't load team emojis ({e}); posting without logos.")
+    return _bot["emojis"]
+
+
+def post_as_bot(payload):
+    """Post through the bot so polls can use its logo emojis. Falls back to the webhook
+    (without logos) if the bot can't post in the channel. Returns (message, 'bot'|'webhook')."""
+    if grading.TOKEN and _bot["ok"] is not False:
+        body = {k: v for k, v in payload.items() if k != "username"}
+        try:
+            msg = bot_call("POST", f"/channels/{pickem_channel()}/messages", body)
+            _bot["ok"] = True
+            return msg, "bot"
+        except BotError as e:
+            print(f"Bot couldn't post ({e}). Falling back to the webhook without logos.")
+            _bot["ok"] = False
+    if payload.get("poll"):
+        for a in payload["poll"]["answers"]:
+            emoji = a["poll_media"].get("emoji") or {}
+            if emoji.get("id"):  # webhooks can't use the bot's own emojis
+                a["poll_media"].pop("emoji")
+    return post(payload), "webhook"
+
+
 def load_state():
     try:
         with open(STATE) as f:
@@ -74,7 +145,9 @@ def save_state(state):
 
 
 def delete_previous():
-    ids = load_state().get("message_ids", [])
+    state = load_state()
+    ids = state.get("message_ids", [])
+    bot_ids = state.get("bot_message_ids", [])
     gone = 0
     for mid in ids:
         try:
@@ -84,6 +157,15 @@ def delete_previous():
             if e.code != 404:  # 404 = already deleted by hand
                 print(f"Could not delete {mid} ({e.code}).")
         time.sleep(0.6)
+    for mid in bot_ids:
+        try:
+            bot_call("DELETE", f"/channels/{state.get('channel_id')}/messages/{mid}")
+            gone += 1
+        except BotError as e:
+            if e.code != 404:
+                print(f"Could not delete {mid} ({e}).")
+        time.sleep(0.6)
+    ids = ids + bot_ids
     if ids:
         print(f"Deleted {gone} of {len(ids)} old pick'em posts.")
 
@@ -121,7 +203,7 @@ def is_rams(g):
     return RAMS in (g[1].get("abbreviation"), g[2].get("abbreviation"))
 
 
-def poll_payload(kick, away, home, now):
+def poll_payload(kick, away, home, now, emojis=None):
     rams = RAMS in (away.get("abbreviation"), home.get("abbreviation"))
     hours = int((kick - now).total_seconds() // 3600)  # rounds down, so it closes by kickoff
     q = f"{away['shortDisplayName']} @ {home['shortDisplayName']}  |  {kick:%a} {nw.fmt_time(kick)}"
@@ -130,7 +212,10 @@ def poll_payload(kick, away, home, now):
 
     def answer(team):
         media = {"text": team["displayName"][:55]}
-        if team.get("abbreviation") == RAMS:
+        logo = (emojis or {}).get(team.get("abbreviation", "").upper())
+        if logo:
+            media["emoji"] = {"id": logo}
+        elif team.get("abbreviation") == RAMS:
             media["emoji"] = {"name": "\U0001F40F"}
         return {"poll_media": media}
 
@@ -182,7 +267,7 @@ def main():
             "color": RAMS_BLUE,
         }],
     }
-    polls = [poll_payload(k, a, h, now) for k, a, h, _ in gs]
+    polls = [poll_payload(k, a, h, now, team_emojis() if WEBHOOK else None) for k, a, h, _ in gs]
 
     if not WEBHOOK:
         print(header["embeds"][0]["title"])
@@ -213,17 +298,21 @@ def main():
         print("Scorecard posted. Waiting 1 minute before the new week.")
         time.sleep(60)
 
-    msgs = [post(header)]
+    first, how = post_as_bot(header)
+    msgs, sent = [first], {"bot": [], "webhook": []}
+    sent[how].append(first.get("id"))
     meta = []
     for (kick, away, home, eid), p in zip(gs, polls):
         time.sleep(1.2)
-        msg = post(p)
+        msg, how = post_as_bot(p)
         msgs.append(msg)
+        sent[how].append(msg.get("id"))
         teams = [away["abbreviation"], home["abbreviation"]]
         meta.append({"message_id": msg.get("id"), "event_id": eid, "kick": kick.isoformat(),
                      "game": f"{teams[0]} @ {teams[1]}", "rams": RAMS in teams,
                      "answers": grading.answer_map(msg, teams)})
-    save_state({"message_ids": [m.get("id") for m in msgs if m.get("id")],
+    save_state({"message_ids": [i for i in sent["webhook"] if i],
+                "bot_message_ids": [i for i in sent["bot"] if i],
                 "channel_id": msgs[0].get("channel_id"), "polls": meta,
                 "week": week_no, "label": label, "season": season, "week_start": week_start,
                 "posted": now.isoformat(timespec="minutes")})
