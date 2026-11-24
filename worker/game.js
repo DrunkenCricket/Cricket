@@ -25,8 +25,8 @@ const SITE = "https://rams-bot.ramsherd.workers.dev";
 const UNCANNY_ODDS = 500;   // 1 in 500 crates, on top of the normal roll
 const GOLD = 0xffa300;
 
-// Picks count from Week 12 of 2026 (fresh start), plus every playoff round after.
-const counts = (r) => Number(r.season) > 2026 || (Number(r.season) === 2026 && (Number(r.week) >= 12 || !/^Week /.test(r.label)));
+// Picks count from Week 9 of 2026 (the first logged week), plus every playoff round after.
+const counts = (r) => Number(r.season) > 2026 || (Number(r.season) === 2026 && (Number(r.week) >= 9 || !/^Week /.test(r.label)));
 
 export const STATS = {
   pass_yds: ["passing", "passingYards", "passing yards"],
@@ -238,6 +238,36 @@ export class Game extends DurableObject {
       wk[r.user_id] = (wk[r.user_id] || 0) + (r.correct === "1" ? 1 : 0);
     }
     await this.weeklyBonus(weeks);
+    return n;
+  }
+
+  /** +5 the moment someone votes in a live poll (same key as the graded log, so it never pays twice). */
+  async syncVotes() {
+    const last = Number(this.meta("votesSynced") || 0);
+    if (Date.now() - last < 5 * 60_000) return 0;
+    this.meta("votesSynced", Date.now());
+    let st;
+    try { st = await (await fetch(STATE_URL, { cf: { cacheTtl: 120 } })).json(); } catch { return 0; }
+    if (!st.channel_id || !st.polls?.length) return 0;
+    let n = 0;
+    for (const p of st.polls) {
+      for (const aid of Object.keys(p.answers || {})) {
+        let after = "";
+        for (let page = 0; page < 5; page++) {
+          const res = await fetch(`https://discord.com/api/v10/channels/${st.channel_id}/polls/${p.message_id}/answers/${aid}?limit=100${after}`,
+            { headers: { Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}` } });
+          if (!res.ok) break;
+          const users = (await res.json()).users || [];
+          for (const u of users) {
+            if (u.bot) continue;
+            this.user(u.id, u.global_name || u.username);
+            if (this.pay(`vote:${p.event_id}:${u.id}`, u.id, VOTE_POINTS, `${st.label}: voted ${p.game}`)) n++;
+          }
+          if (users.length < 100) break;
+          after = `&after=${users[users.length - 1].id}`;
+        }
+      }
+    }
     return n;
   }
 
@@ -651,6 +681,7 @@ export class Game extends DurableObject {
         headers: { "Content-Type": "application/json" }, body }).catch(() => {});
     }
     await this.syncPicks();
+    try { await this.syncVotes(); } catch (e) { console.log("votes", e); }
     const n = await this.resolveProps();
     return n;
   }
