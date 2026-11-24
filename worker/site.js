@@ -660,7 +660,7 @@ function pasture() {
     el.className = "rw"; el.href = "/ram/" + r.id;
     el.innerHTML = '<img src="/ram/' + r.id + '.svg?bare" alt=""><span>' + esc(r.name) + (r.points ? '<b>' + r.points + ' RUTS</b>' : "") + '</span>';
     pa.appendChild(el);
-    return { el, img: el.firstChild, x: rnd(14, 86), y: rnd(24, 96), tx: 0, ty: 0, wait: rnd(0, 0.8), speed: rnd(9, 15), t: rnd(0, 6) };
+    return { el, img: el.firstChild, x: rnd(14, 86), y: rnd(24, 96), tx: 0, ty: 0, wait: rnd(0, 0.8), speed: rnd(2.5, 4), t: rnd(0, 6) };
   });
   sheep.forEach((s) => { s.tx = s.x; s.ty = s.y; });
   let last = performance.now();
@@ -672,14 +672,14 @@ function pasture() {
         else {
           const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
           if (d < 0.5) {   // arrived: short breather, then a new spot anywhere on the field (sometimes a sprint)
-            s.wait = Math.random() < .25 ? rnd(1, 2.5) : rnd(0.1, 0.7);
-            s.tx = rnd(14, 86); s.ty = rnd(24, 96); s.speed = !calm && Math.random() < .2 ? rnd(22, 30) : rnd(9, 15);
-          } else { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; s.t += dt * s.speed * 0.9; }
+            s.wait = Math.random() < .3 ? rnd(2, 4) : rnd(0.5, 1.5);
+            s.tx = rnd(14, 86); s.ty = rnd(24, 96); s.speed = !calm && Math.random() < .15 ? rnd(6, 8) : rnd(2.5, 4);
+          } else { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; s.t += dt * (4 + s.speed * 0.8); }
         }
       }
       const k = 0.6 + (s.y - 24) / 72 * 0.5;
       s.el.style.left = s.x + "%"; s.el.style.top = s.y + "%";
-      const hop = s.wait > 0 || calm ? 0 : -Math.abs(Math.sin(s.t)) * 10;   // trotting bounce while moving
+      const hop = s.wait > 0 || calm ? 0 : -Math.abs(Math.sin(s.t)) * 6;   // trotting bounce while moving
       s.el.style.transform = "translateY(" + hop.toFixed(1) + "px) scale(" + k.toFixed(3) + ")"; s.el.style.transformOrigin = "50% 100%";
       s.el.style.zIndex = Math.round(s.y * 10);
     }
