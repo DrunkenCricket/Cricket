@@ -142,9 +142,12 @@ async function myPicks(interaction) {
     byWeek.set(r.label, wk);
   }
   const weeks = [...byWeek.keys()].sort(weekOrder);
-  const weekLines = weeks.map((wk) => `${wk}: **${byWeek.get(wk).w}-${byWeek.get(wk).l}**`);
-
   const last = weeks[weeks.length - 1];
+  const rec2 = (wk) => `${wk}: **${byWeek.get(wk).w}-${byWeek.get(wk).l}**`;
+  const best = weeks.reduce((a, b) => (byWeek.get(b).w > byWeek.get(a).w ? b : a));
+  // Keeps this column short all season: last week, plus best week once there's more than one.
+  const weekLines = [rec2(last)];
+  if (weeks.length > 1) weekLines.push("", "**Best week**", rec2(best));
   const lastPicks = mine.filter((r) => r.label === last)
     .map((r) => `${r.correct === "1" ? "✅" : "❌"} ${r.game}: took **${r.pick}**`);
 
@@ -154,7 +157,7 @@ async function myPicks(interaction) {
       description: `<@${uid}>  **${rec.w}-${rec.l}**  (${pct(rec.w, rec.l)})  •  #${rank + 1} of ${ranked.length}`,
       color: GOLD,
       fields: [
-        { name: "By Week", value: weekLines.join("\n").slice(0, 1024), inline: true },
+        { name: "Last Week", value: weekLines.join("\n").slice(0, 1024), inline: true },
         { name: `${last} Picks`, value: lastPicks.join("\n").slice(0, 1024), inline: true },
       ],
       footer: { text: `${season} season` },
