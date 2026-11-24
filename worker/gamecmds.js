@@ -6,7 +6,7 @@ import { CRATE_COST, PICK_POINTS, VOTE_POINTS, PODIUM_RUTS, PROP_COST, FIGHT_STA
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
-export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts", "moments", "herdcommands"]);
+export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts", "moments", "herdcommands", "bet"]);
 
 const game = (env) => env.GAME.get(env.GAME.idFromName("main"));
 const who = (i) => i.member?.user || i.user;
@@ -20,6 +20,8 @@ const color = (it) => RARITY[it.rarity]?.color ?? 0xff4fd8;
 const rarityName = (it) => RARITY[it.rarity]?.label || "SECRET";
 
 export async function gameCommand(i, env, ctx) {
+  // /bet is a fresh, simple name for "/prop random" (no server overrides can hide it)
+  if (i.data.name === "bet") i = { ...i, data: { ...i.data, name: "prop", options: [{ type: 1, name: "random", options: [] }] } };
   const g = game(env), me = who(i), uid = me.id, name = nameOf(me);
   switch (i.data.name) {
     case "points": case "ruts": {
@@ -95,7 +97,7 @@ export async function gameCommand(i, env, ctx) {
           { name: "💰 RUTS", value: [line("/ruts", "your RUTS, crates and the top 10"), `Every pick'em vote = **${VOTE_POINTS} RUTS**, right picks **+${PICK_POINTS}** more. Weekly: most correct wins a **crate**, 2nd and 3rd get **${PODIUM_RUTS} RUTS** (ties share).`].join("\n") },
           { name: "🐏 Your ram", value: [line("/crate", `open a crate (first is free, then ${CRATE_COST} RUTS)`), line("/lockeroom", "the website locker: unbox, shop and dress your ram"),
             line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
-          { name: "🎲 Bets & fights", value: [line("/prop random", `post a random player bet (entry ${PROP_COST} RUTS, a hit wins a crate)`), line("/prop cancel", "cancel a bet you posted"),
+          { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet (entry ${PROP_COST} RUTS, a hit wins a crate)`), line("/prop cancel", "cancel a bet you posted"),
             line("/prop check", "settle finished bets now"), line("/fight", `challenge a ram: ${FIGHT_STAKE} RUTS each, winner takes all`)].join("\n") },
           { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "show !flag / !TD GIFs on the website")].join("\n") },
           { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Lockeroom](${SITE})` },

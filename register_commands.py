@@ -51,6 +51,7 @@ COMMANDS = [
          {"name": "Thin", "value": "thin"}, {"name": "Medium", "value": "med"}, {"name": "Large", "value": "large"}]}]},
     {"name": "ram", "description": "Show a ram", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose ram", "required": False}]},
+    {"name": "bet", "description": "Post a random prop bet: any team, any player (20 RUTS to enter, a hit wins a crate)", "type": 1, "contexts": [0]},
     {"name": "prop", "description": "Prop bets: post a random one, cancel yours, or check results", "type": 1, "contexts": [0],
      "options": [
          {"type": 1, "name": "random", "description": "Post a totally random bet: any team, any player, any stat"},
