@@ -5,12 +5,14 @@
 //          Duplicates refund points by rarity.
 // Props:   admins post "PLAYER gets N+ STAT". Entry costs 20 points; a hit wins a crate.
 //          Results come from ESPN's live box score, so a prop can pay out mid-game the moment it hits.
-// Points are earned only. Nothing here can be bought with money.
+// Fights:  challenge someone for 50 RUTS each, winner takes 100. The fight plays out on the website.
+// The currency is called RUTS. It's earned only. Nothing here can be bought with money.
 
 import { DurableObject } from "cloudflare:workers";
 import { ITEMS, RARITY, FIRST_CRATE, SLOTS, SLOT_NAMES, BODY_TYPES } from "./ram.js";
 
-export const PICK_POINTS = 10, CRATE_COST = 60, PROP_COST = 20;
+export const PICK_POINTS = 10, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50;
+const FIGHT_TTL = 10 * 60_000;   // challenges expire after 10 minutes
 const CSV_URL = "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/data/picks.csv";
 const ESPN = "https://site.api.espn.com/apis/site/v2/sports/football/nfl";
 const APP_ID = "1574684181361852416";
@@ -57,7 +59,9 @@ export class Game extends DurableObject {
       CREATE TABLE IF NOT EXISTS props (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT, game TEXT, player TEXT, stat TEXT,
         line REAL, closes INTEGER, status TEXT DEFAULT 'open', value REAL, channel_id TEXT, message_id TEXT, token TEXT, created INTEGER);
       CREATE TABLE IF NOT EXISTS entries (prop_id INTEGER, user_id TEXT, ts INTEGER, PRIMARY KEY (prop_id, user_id));
-      CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);`);
+      CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
+      CREATE TABLE IF NOT EXISTS fights (id INTEGER PRIMARY KEY AUTOINCREMENT, a TEXT, b TEXT, a_name TEXT, b_name TEXT, stake INTEGER,
+        status TEXT DEFAULT 'pending', winner TEXT, rounds INTEGER, seed INTEGER, a_look TEXT, b_look TEXT, channel_id TEXT, created INTEGER);`);
   }
 
   // ---------- helpers ----------
@@ -114,7 +118,7 @@ export class Game extends DurableObject {
     let u = this.user(uid, name);
     let bought = false;
     if (u.crates < 1) {
-      if (u.points < CRATE_COST) return { error: `A crate costs **${CRATE_COST}** points. You have **${u.points}**. Correct picks pay ${PICK_POINTS} each.` };
+      if (u.points < CRATE_COST) return { error: `A crate costs **${CRATE_COST} RUTS**. You have **${u.points}**. Correct picks pay ${PICK_POINTS} each.` };
       this.sql.exec("UPDATE users SET points = points - ?, crates = crates + 1 WHERE id=?", CRATE_COST, uid);
       this.sql.exec("INSERT INTO ledger (key,user_id,delta,reason,ts) VALUES (?,?,?,?,?)", `crate:${crypto.randomUUID()}`, uid, -CRATE_COST, "Bought a crate", Date.now());
       bought = true;
@@ -207,7 +211,7 @@ export class Game extends DurableObject {
     if (p.status !== "open" || Date.now() > p.closes) return { error: "This bet is closed." };
     if (this.one("SELECT 1 AS x FROM entries WHERE prop_id=? AND user_id=?", propId, uid)) return { error: "You're already in on this one." };
     const u = this.user(uid, name);
-    if (u.points < PROP_COST) return { error: `Entry is **${PROP_COST}** points. You have **${u.points}**.` };
+    if (u.points < PROP_COST) return { error: `Entry is **${PROP_COST} RUTS**. You have **${u.points}**.` };
     this.sql.exec("INSERT INTO entries (prop_id,user_id,ts) VALUES (?,?,?)", propId, uid, Date.now());
     this.pay(`prop:${propId}:${uid}`, uid, -PROP_COST, `Bet #${propId}`);
     return { prop: p, count: this.count(propId), user: this.one("SELECT * FROM users WHERE id=?", uid) };
@@ -272,7 +276,51 @@ export class Game extends DurableObject {
     this.sql.exec("UPDATE props SET channel_id=?, message_id=? WHERE id=? AND message_id IS NULL", channelId, messageId, propId);
   }
 
+  // ---------- fights ----------
+  challenge(a, aName, b, bName, channelId) {
+    if (a === b) return { error: "You can't fight yourself." };
+    const u = this.user(a, aName);
+    this.user(b, bName);
+    if (u.points < FIGHT_STAKE) return { error: `A fight costs **${FIGHT_STAKE} RUTS**. You have **${u.points}**.` };
+    if (this.one("SELECT 1 AS x FROM fights WHERE status='pending' AND ((a=? AND b=?) OR (a=? AND b=?))", a, b, b, a))
+      return { error: "There's already a fight waiting between you two." };
+    this.sql.exec("INSERT INTO fights (a,b,a_name,b_name,stake,channel_id,created) VALUES (?,?,?,?,?,?,?)", a, b, aName, bName, FIGHT_STAKE, channelId, Date.now());
+    const f = this.one("SELECT * FROM fights WHERE id = last_insert_rowid()");
+    this.pay(`fight:${f.id}:${a}`, a, -FIGHT_STAKE, `Fight #${f.id} vs ${bName}`);
+    return { fight: f };
+  }
+
+  accept(id, uid, name) {
+    const f = this.one("SELECT * FROM fights WHERE id=?", id);
+    if (!f || f.status !== "pending") return { error: "This fight is over." };
+    if (uid !== f.b) return { error: "Only the challenged ram can accept." };
+    if (Date.now() - f.created > FIGHT_TTL) { this.endFight(f, "expired"); return { error: "This challenge expired. Their RUTS went back." }; }
+    const u = this.user(uid, name);
+    if (u.points < f.stake) return { error: `You need **${f.stake} RUTS** to fight. You have **${u.points}**.` };
+    this.pay(`fight:${f.id}:${uid}`, uid, -f.stake, `Fight #${f.id} vs ${f.a_name}`);
+    const winner = rand(2) ? f.a : f.b, rounds = 2 + rand(2), seed = rand(1e9);
+    const look = (x) => this.one("SELECT look FROM users WHERE id=?", x)?.look || "{}";
+    this.sql.exec("UPDATE fights SET status='done', winner=?, rounds=?, seed=?, a_look=?, b_look=? WHERE id=?", winner, rounds, seed, look(f.a), look(f.b), id);
+    this.pay(`fightwin:${f.id}`, winner, f.stake * 2, `Won fight #${f.id}`);
+    return { fight: this.one("SELECT * FROM fights WHERE id=?", id) };
+  }
+
+  /** Decline (by the challenged ram), cancel (by the challenger), or expire: the challenger gets their RUTS back. */
+  endFight(f, status) {
+    this.sql.exec("UPDATE fights SET status=? WHERE id=? AND status='pending'", status, f.id);
+    this.pay(`fightrefund:${f.id}`, f.a, f.stake, `Fight #${f.id} ${status}`);
+  }
+  decline(id, uid) {
+    const f = this.one("SELECT * FROM fights WHERE id=?", id);
+    if (!f || f.status !== "pending") return { error: "This fight is over." };
+    if (uid !== f.a && uid !== f.b) return { error: "This isn't your fight." };
+    this.endFight(f, uid === f.b ? "declined" : "cancelled");
+    return { fight: this.one("SELECT * FROM fights WHERE id=?", id) };
+  }
+  fight(id) { return this.one("SELECT * FROM fights WHERE id=?", id); }
+
   async tick() {
+    for (const f of this.all("SELECT * FROM fights WHERE status='pending' AND created < ?", Date.now() - FIGHT_TTL)) this.endFight(f, "expired");
     await this.syncPicks();
     const n = await this.resolveProps();
     return n;
@@ -284,6 +332,10 @@ export class Game extends DurableObject {
     const recent = this.all("SELECT delta, reason FROM ledger WHERE user_id=? ORDER BY ts DESC LIMIT 6", uid);
     const rank = this.one("SELECT COUNT(*) AS n FROM users WHERE points > ?", u.points).n + 1;
     return { user: u, recent, rank, items: this.owned(uid).size };
+  }
+  locker(uid) {
+    const u = this.one("SELECT * FROM users WHERE id=?", uid) || this.user(uid);
+    return { name: u.name, points: u.points, crates: u.crates, opened: u.opened, look: JSON.parse(u.look), items: this.inventory(uid) };
   }
   herd() { return this.all("SELECT id, name, points FROM users"); }
   leaders() { return this.all("SELECT id, name, points FROM users ORDER BY points DESC LIMIT 10"); }
@@ -315,11 +367,11 @@ export function propMessage(p, count, winners = []) {
   return {
     embeds: [{
       title: `🎲 Bet #${p.id}: ${p.player} gets ${p.line}+ ${stat}`,
-      description: `${p.game}\nEntry: **${PROP_COST} points**  •  Prize: **a crate**\n${open ? `Closes <t:${ts}:R>` : ""}${result}`,
+      description: `${p.game}\nEntry: **${PROP_COST} RUTS**  •  Prize: **a crate**\n${open ? `Closes <t:${ts}:R>` : ""}${result}`,
       color: p.status === "hit" ? 0x22c55e : p.status === "miss" ? 0xef4444 : GOLD,
       footer: { text: `${count} in` },
     }],
-    components: open ? [{ type: 1, components: [{ type: 2, style: 3, custom_id: `prop:${p.id}`, label: `Take the bet (${PROP_COST} pts)`, emoji: { name: "🎲" } }] }] : [],
+    components: open ? [{ type: 1, components: [{ type: 2, style: 3, custom_id: `prop:${p.id}`, label: `Take the bet (${PROP_COST} RUTS)`, emoji: { name: "🎲" } }] }] : [],
     allowed_mentions: { parse: [] },
   };
 }

@@ -19,7 +19,7 @@ export { Game } from "./game.js";
 
 export default {
   async fetch(request, env, ctx) {
-    if (request.method === "GET") return handleSite(request, env, ctx);
+    if (request.method === "GET" || new URL(request.url).pathname.startsWith("/api/locker")) return handleSite(request, env, ctx);
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
     const body = await request.text();
     if (!(await verify(request, body))) return new Response("Bad signature", { status: 401 });

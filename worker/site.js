@@ -5,7 +5,9 @@
 //
 // Needs the DISCORD_BOT_TOKEN Worker secret to read poll voters, avatars and logo emojis.
 
-import { renderRam, ITEMS, SLOT_NAMES } from "./ram.js";
+import { renderRam, ITEMS, SLOT_NAMES, RARITY, BODY_TYPES } from "./ram.js";
+import { lockerUser } from "./gamecmds.js";
+import { CRATE_COST } from "./game.js";
 
 const RAW = "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/";
 const APP_ID = "1574684181361852416";
@@ -192,8 +194,33 @@ async function herdData(env, ctx) {
   return { rams: [...herd.values()] };
 }
 
+// Locker API: every call carries the signed link token; it only ever acts on that token's own user.
+async function lockerApi(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "Bad request" }, 0); }
+  const uid = await lockerUser(env, body.t);
+  if (!uid) return json({ error: "This locker link expired. Run /locker in Discord for a new one." }, 0);
+  const g = env.GAME.get(env.GAME.idFromName("main"));
+  let extra = {};
+  if (body.op === "crate") {
+    const r = await g.openCrate(uid);
+    if (r.error) extra.error = r.error.replace(/\*\*/g, "");
+    else extra.reveal = { item: r.item, dupe: r.dupe, refund: r.refund, guaranteed: r.guaranteed, bought: r.bought };
+  } else if (body.op === "equip") {
+    const r = await g.equip(uid, String(body.item));
+    if (r.error) extra.error = r.error.replace(/\*\*/g, "");
+  } else if (body.op === "unequip" && SLOT_NAMES[body.slot]) {
+    await g.setLook(uid, body.slot, null);
+  } else if (body.op === "body" && BODY_TYPES[body.type]) {
+    await g.setLook(uid, "body", body.type);
+  }
+  return json({ uid, ...(await g.locker(uid)), ...extra }, 0);
+}
+
 export async function handleSite(request, env, ctx) {
   const { pathname } = new URL(request.url);
+  if (pathname === "/api/locker" && request.method === "POST" && env.GAME) return lockerApi(request, env);
+  if (pathname === "/locker") return new Response(lockerPage(), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
   try {
     if (pathname === "/api/week") return json(await weekData(env, ctx), 60);
     if (pathname === "/api/history") return json(await historyData(env, ctx), 120);
@@ -205,10 +232,20 @@ export async function handleSite(request, env, ctx) {
   if (ram && env.GAME) {
     const r = await env.GAME.get(env.GAME.idFromName("main")).look(ram[1]);
     const look = { ...(r?.look || {}) };
-    if (new URL(request.url).searchParams.has("bare")) look.bg = "none";   // for the Herd pasture
+    const q = new URL(request.url).searchParams;
+    if (q.has("bare")) look.bg = "none";                                   // Herd pasture and fights
+    if (ITEMS[q.get("pose")]?.slot === "pose") look.pose = q.get("pose");  // fight celebrations
+    const tryOn = ITEMS[q.get("try")];                                     // crate reveal: wear the new item
+    if (tryOn) look[tryOn.slot === "body" ? "body" : tryOn.slot] = tryOn.id;
     const svg = renderRam(look, 512, "css");
     if (ram[2]) return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=30" } });
     return new Response(ramPage(r?.name || "Ram", svg, look), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=30" } });
+  }
+  const fm = pathname.match(/^\/fight\/(\d+)$/);
+  if (fm && env.GAME) {
+    const f = await env.GAME.get(env.GAME.idFromName("main")).fight(Number(fm[1]));
+    if (!f) return new Response("No such fight", { status: 404 });
+    return new Response(fightPage(f), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=15" } });
   }
   if (pathname === "/" || pathname === "/index.html") {
     return new Response(PAGE, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
@@ -229,6 +266,209 @@ i{margin-left:auto;font-style:normal;font-size:12px;text-transform:uppercase}.co
 a{color:#ffc82c}</style></head><body><main><h1>🐏 ${esc(name)}'s Ram</h1><div class="ram">${svg}</div><ul>${worn}</ul>
 <p><a href="/">Pick'em board</a></p></main></body></html>`;
 }
+
+// A football field: blue and gold end zones, yard lines every 10, numbers along the bottom.
+const FIELD_CSS = `.field{position:relative;overflow:hidden;border-radius:18px;border:3px solid #fff;
+  background:repeating-linear-gradient(90deg,#2f8f3c 0 4.2%,#2a8236 4.2% 8.4%)}
+.field .ez{position:absolute;top:0;bottom:0;width:8%;display:grid;place-items:center}
+.field .ez b{writing-mode:vertical-rl;font:900 clamp(18px,4vw,44px)/1 system-ui,sans-serif;letter-spacing:6px;color:#fff;opacity:.9}
+.field .ez.l{left:0;background:#003594}.field .ez.l b{transform:rotate(180deg)}
+.field .ez.r{right:0;background:#ffa300}.field .ez.r b{color:#003594}
+.field .yl{position:absolute;top:0;bottom:0;width:3px;margin-left:-1.5px;background:rgba(255,255,255,.75)}
+.field .hm{position:absolute;top:33%;bottom:33%;left:8%;right:8%;background:repeating-linear-gradient(90deg,rgba(255,255,255,.55) 0 2px,transparent 2px 1.68%);
+  -webkit-mask:linear-gradient(#000 0 8%,transparent 8% 92%,#000 92%);mask:linear-gradient(#000 0 8%,transparent 8% 92%,#000 92%)}
+.field .num{position:absolute;bottom:6%;transform:translateX(-50%);color:rgba(255,255,255,.8);font:800 clamp(12px,2.2vw,24px)/1 system-ui,sans-serif;letter-spacing:2px}`;
+const FIELD = `<div class="ez l"><b>RAMS</b></div><div class="ez r"><b>HERD</b></div><div class="hm"></div>`
+  + Array.from({ length: 11 }, (_, i) => `<div class="yl" style="left:${8 + i * 8.4}%"></div>`).join("")
+  + [10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, i) => `<div class="num" style="left:${16.4 + i * 8.4}%">${n}</div>`).join("");
+
+function lockerPage() {
+  const meta = { slots: SLOT_NAMES, rarity: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, { label: v.label, color: "#" + v.color.toString(16).padStart(6, "0") }])), bodies: BODY_TYPES, cost: CRATE_COST };
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ram Locker</title><meta name="robots" content="noindex">
+<style>:root{--bg:#0d1328;--card:#151d3b;--card2:#1c2650;--line:#26315f;--ink:#eef2ff;--dim:#9aa6c7;--gold:#ffc82c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,sans-serif;padding:16px}
+main{max-width:1080px;margin:0 auto}h1{margin:0 0 4px;font-size:clamp(22px,4vw,30px)}.sub{color:var(--dim);margin-bottom:16px}.sub b{color:var(--gold)}
+.cols{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:16px}@media (max-width:760px){.cols{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.me img{width:100%;border-radius:12px;display:block;background:#1b2440}
+.seg{display:flex;gap:6px;margin:12px 0}.seg button{flex:1}
+button{background:var(--card2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:600 14px system-ui;cursor:pointer}
+button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45;cursor:default}
+.buy{width:100%;background:var(--gold);color:#111;border:0;font-size:16px;padding:12px}
+.reveal{margin-top:12px;display:none;text-align:center}.reveal img{width:100%;max-width:260px;border-radius:12px}
+.reveal h2{margin:6px 0 2px;font-size:22px}.tagr{font-weight:800;font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.chips button{padding:6px 10px;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.it{text-align:left;padding:10px;border-left-width:4px}.it small{display:block;color:var(--dim);font-weight:500;margin-top:2px}
+.it.on{background:#24305f;box-shadow:inset 0 0 0 1px var(--gold)}.it.on::after{content:" ✓";color:var(--gold)}
+.err{color:#ff8080;min-height:20px;margin-top:8px}.empty{color:var(--dim);padding:24px;text-align:center}a{color:var(--gold)}</style></head>
+<body><main><h1 id="title">🎒 Ram Locker</h1><div class="sub" id="sub">Loading...</div>
+<div class="cols"><div class="card me"><img id="ram" alt="Your ram">
+<div class="seg" id="bodies"></div>
+<button class="buy" id="buy">Open crate</button><div class="err" id="err"></div>
+<div class="reveal" id="rev"></div></div>
+<div class="card"><div class="chips" id="chips"></div><div class="grid" id="grid"></div></div></div>
+<p><a href="/#herd">See the herd</a></p></main>
+<script>
+const M = ${JSON.stringify(meta)};
+const T = new URLSearchParams(location.hash.slice(1)).get("t");
+const h = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+let S = null, filter = "all", v = Date.now();
+const $ = (id) => document.getElementById(id);
+async function call(op, extra) {
+  const r = await fetch("/api/locker", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ t: T, op, ...extra }) });
+  const d = await r.json(); $("err").textContent = d.error || "";
+  if (d.uid) { S = d; v = Date.now(); draw(); }
+  return d;
+}
+function draw() {
+  $("title").textContent = "🎒 " + (S.name || "Your") + "'s Locker";
+  $("sub").innerHTML = "<b>" + S.points + " RUTS</b> · " + S.crates + " crate" + (S.crates === 1 ? "" : "s") + " waiting · " + S.items.length + " items";
+  $("ram").src = "/ram/" + S.uid + ".svg?v=" + v;
+  $("bodies").innerHTML = Object.entries(M.bodies).map(([k, n]) => '<button data-b="' + k + '" class="' + ((S.look.body || "med") === k ? "on" : "") + '">' + n + "</button>").join("");
+  const b = $("buy");
+  b.textContent = S.crates > 0 ? "📦 Open crate (" + S.crates + " waiting)" : "📦 Buy a crate · " + M.cost + " RUTS";
+  b.disabled = S.crates < 1 && S.points < M.cost;
+  const slots = [...new Set(S.items.map((i) => i.slot))];
+  $("chips").innerHTML = ['<button data-f="all" class="' + (filter === "all" ? "on" : "") + '">All</button>'].concat(slots.map((sl) =>
+    '<button data-f="' + sl + '" class="' + (filter === sl ? "on" : "") + '">' + h(M.slots[sl] || sl) + "</button>")).join("");
+  const list = S.items.filter((i) => filter === "all" || i.slot === filter);
+  $("grid").innerHTML = list.length ? list.map((i) => {
+    const r = M.rarity[i.rarity] || { label: "Secret", color: "#5ee08f" }, on = S.look[i.slot] === i.id || (i.slot === "body" && S.look.body === i.id);
+    return '<button class="it' + (on ? " on" : "") + '" data-i="' + i.id + '" data-s="' + i.slot + '" style="border-left-color:' + r.color + '">' + h(i.name)
+      + '<small><span style="color:' + r.color + '">' + r.label + "</span> · " + h(M.slots[i.slot] || i.slot) + "</small></button>";
+  }).join("") : '<div class="empty">Nothing here yet. Open a crate!</div>';
+}
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.b) call("body", { type: t.dataset.b });
+  else if (t.dataset.f) { filter = t.dataset.f; draw(); }
+  else if (t.dataset.i) t.classList.contains("on") ? call("unequip", { slot: t.dataset.s }) : call("equip", { item: t.dataset.i });
+  else if (t.id === "buy") {
+    t.disabled = true; t.textContent = "Opening...";
+    const d = await call("crate");
+    if (d.reveal) {
+      const i = d.reveal.item, r = M.rarity[i.rarity] || { label: "SECRET", color: "#5ee08f" }, rv = $("rev");
+      rv.style.display = "block";
+      rv.innerHTML = '<img src="/ram/' + S.uid + ".svg?try=" + i.id + "&v=" + Date.now() + '" alt=""><div class="tagr" style="color:' + r.color + '">' + r.label + " " + h(M.slots[i.slot] || i.slot)
+        + "</div><h2>" + h(i.name) + "</h2>" + (d.reveal.dupe ? "<div>Already had it: +" + d.reveal.refund + " RUTS back</div>" : '<button data-i="' + i.id + '" data-s="' + i.slot + '">Equip it</button>');
+    }
+    draw();
+  }
+});
+if (!T) $("sub").textContent = "Run /locker in Discord to get your private link."; else call("state");
+</script></body></html>`;
+}
+
+function fightPage(f) {
+  const data = { id: f.id, a: f.a, b: f.b, an: f.a_name, bn: f.b_name, winner: f.winner, rounds: f.rounds, seed: f.seed, pot: f.stake * 2, status: f.status };
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ram Fight #${f.id}</title><meta property="og:title" content="Ram Fight #${f.id}: ${esc(f.a_name)} vs ${esc(f.b_name)}">
+<style>:root{--bg:#0d1328;--gold:#ffc82c}body{margin:0;background:var(--bg);color:#eef2ff;font:16px system-ui,sans-serif;padding:16px}
+main{max-width:980px;margin:0 auto}h1{margin:4px 0 14px;font-size:clamp(20px,4vw,30px)}h1 span{color:var(--gold)}
+${FIELD_CSS}
+.stage{height:min(52vw,460px);min-height:280px}
+.ram{position:absolute;bottom:10%;width:30%;max-width:240px;transform:translateX(-50%);z-index:5}
+.ram img{width:100%;display:block;transform-origin:50% 90%}
+.ram .nm{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);background:rgba(0,0,0,.65);padding:2px 10px;border-radius:8px;font-weight:700;font-size:14px;white-space:nowrap}
+.boom{position:absolute;left:50%;top:38%;width:160px;height:160px;margin:-80px 0 0 -80px;z-index:9;opacity:0;pointer-events:none}
+.word{position:absolute;left:50%;top:18%;transform:translateX(-50%);z-index:10;font:900 clamp(28px,6vw,64px)/1 system-ui,sans-serif;color:#ffd400;-webkit-text-stroke:3px #15172b;opacity:0;pointer-events:none}
+.stars{position:absolute;left:50%;top:-4%;width:60%;height:24%;transform:translateX(-50%);display:none}
+.stars i{position:absolute;left:50%;top:50%;font-style:normal;font-size:clamp(16px,3vw,28px);animation:orbit 1.2s linear infinite}
+@keyframes orbit{from{transform:rotate(0deg) translateX(46px) rotate(0deg) scaleY(1.6)}to{transform:rotate(360deg) translateX(46px) rotate(-360deg) scaleY(1.6)}}
+.ring{position:absolute;width:22px;height:22px;margin:-11px;border-radius:50%;border:5px solid #ffd400;box-shadow:inset 0 0 0 2px #b8860b,0 0 0 2px #b8860b;z-index:8}
+.banner{margin-top:16px;padding:14px 18px;border-radius:14px;background:#151d3b;font-size:18px;min-height:28px}
+.banner b{color:var(--gold)}button{margin-top:12px;background:var(--gold);color:#111;border:0;border-radius:10px;padding:10px 18px;font:700 15px system-ui;cursor:pointer}
+a{color:var(--gold)}
+@media (prefers-reduced-motion:reduce){.stars i{animation:none}}</style></head><body><main>
+<h1>Fight #${f.id}: <span>${esc(f.a_name)}</span> vs <span>${esc(f.b_name)}</span></h1>
+<div class="stage field" id="st">${FIELD}
+<svg class="boom" id="boom" viewBox="-50 -50 100 100"><path d="M0 -48 L10 -16 L44 -28 L20 -2 L46 22 L12 16 L4 48 L-8 18 L-42 32 L-20 4 L-46 -20 L-12 -14 Z" fill="#fff6c2" stroke="#ffd400" stroke-width="4"/></svg>
+<div class="word" id="word"></div>
+<div class="ram" id="A"><img alt=""><div class="stars"><i>⭐</i><i style="animation-delay:-.4s">⭐</i><i style="animation-delay:-.8s">✨</i></div><div class="nm">${esc(f.a_name)}</div></div>
+<div class="ram" id="B"><img alt=""><div class="stars"><i>⭐</i><i style="animation-delay:-.4s">⭐</i><i style="animation-delay:-.8s">✨</i></div><div class="nm">${esc(f.b_name)}</div></div>
+</div>
+<div class="banner" id="msg">Get ready...</div>
+<button id="again" hidden>Watch again</button> <a href="/#herd">See the whole herd</a>
+<script>
+const F = ${JSON.stringify(data).replace(/</g, "\\u003c")};
+${FIGHT_JS}
+</script></main></body></html>`;
+}
+
+// Fight playback. Everything random comes from the fight's seed, so every replay is the same fight.
+const FIGHT_JS = String.raw`
+const st = document.getElementById("st"), msg = document.getElementById("msg"), boom = document.getElementById("boom"), word = document.getElementById("word");
+const R = { A: document.getElementById("A"), B: document.getElementById("B") };
+const src = (id, pose) => "/ram/" + id + ".svg?bare" + (pose ? "&pose=" + pose : "");
+function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const h = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const move = (el, x, ms, ease = "ease-in-out", extra = "") => el.animate([{ left: el.style.left }, { left: x + "%" }], { duration: ms, easing: ease, fill: "forwards" }).finished.then(() => { el.style.left = x + "%"; });
+const tilt = (el, deg, ms = 200) => el.querySelector("img").animate([{ transform: getComputedStyle(el.querySelector("img")).transform }, { transform: "rotate(" + deg + "deg)" }], { duration: ms, fill: "forwards" }).finished;
+const WORDS = ["BONK!", "CRACK!", "THUD!", "WHAM!", "KLONK!", "SMASH!"];
+function reset() {
+  for (const k of ["A", "B"]) { const el = R[k]; el.getAnimations().forEach((a) => a.cancel()); el.querySelector("img").getAnimations().forEach((a) => a.cancel());
+    el.querySelector("img").src = src(F[k.toLowerCase()]); el.querySelector("img").style.transform = ""; el.querySelector(".stars").style.display = "none"; }
+  R.A.style.left = "28%"; R.B.style.left = "72%";
+  document.querySelectorAll(".ring").forEach((r) => r.remove());
+}
+function impact(rand) {
+  word.textContent = WORDS[Math.floor(rand() * WORDS.length)];
+  boom.animate([{ opacity: 1, transform: "scale(.2) rotate(0deg)" }, { opacity: 1, transform: "scale(1.3) rotate(20deg)", offset: .4 }, { opacity: 0, transform: "scale(1.6) rotate(30deg)" }], { duration: 420 });
+  word.animate([{ opacity: 0, transform: "translateX(-50%) scale(.4)" }, { opacity: 1, transform: "translateX(-50%) scale(1.15)", offset: .3 }, { opacity: 0, transform: "translateX(-50%) scale(1)" }], { duration: 700 });
+  st.animate([{ transform: "translate(0,0)" }, { transform: "translate(-8px,4px)" }, { transform: "translate(7px,-5px)" }, { transform: "translate(-4px,2px)" }, { transform: "translate(0,0)" }], { duration: 260 });
+}
+function coins(el, rand) {
+  const box = st.getBoundingClientRect(), r = el.getBoundingClientRect();
+  const x0 = r.left - box.left + r.width / 2, y0 = r.top - box.top + r.height * 0.35;
+  for (let i = 0; i < 14; i++) {
+    const c = document.createElement("div"); c.className = "ring"; st.appendChild(c);
+    let x = x0, y = y0, vx = (rand() - .5) * 520, vy = -260 - rand() * 360, t0 = performance.now(), last = t0, bounces = 0;
+    const floor = box.height * 0.92;
+    (function fly(now) {
+      const dt = (now - last) / 1000; last = now; vy += 900 * dt; x += vx * dt; y += vy * dt;
+      if (y > floor && bounces < 2) { y = floor; vy *= -0.5; vx *= 0.7; bounces++; }
+      c.style.left = x + "px"; c.style.top = y + "px"; c.style.transform = "scaleX(" + Math.abs(Math.cos(now / 90 + i)).toFixed(2) + ")";
+      const age = now - t0; c.style.opacity = age > 1600 ? Math.max(0, 1 - (age - 1600) / 600) : 1;
+      if (age < 2200) requestAnimationFrame(fly); else c.remove();
+    })(t0);
+  }
+}
+async function play() {
+  document.getElementById("again").hidden = true; reset();
+  if (F.status !== "done") { msg.innerHTML = F.status === "pending" ? "Waiting for <b>" + h(F.bn) + "</b> to accept..." : "This fight was called off."; return; }
+  const rand = rng(F.seed), win = F.winner === F.a ? "A" : "B", lose = win === "A" ? "B" : "A";
+  msg.textContent = "Round 1..."; await sleep(700);
+  for (let r = 1; r <= F.rounds; r++) {
+    msg.textContent = r === F.rounds ? "Final headbutt..." : "Round " + r + "...";
+    await Promise.all([move(R.A, 16, 420), move(R.B, 84, 420), tilt(R.A, -6), tilt(R.B, 6)]);
+    await sleep(150 + rand() * 250);
+    await Promise.all([tilt(R.A, 14, 120), tilt(R.B, -14, 120), move(R.A, 42, 380, "cubic-bezier(.5,0,1,1)"), move(R.B, 58, 380, "cubic-bezier(.5,0,1,1)")]);
+    impact(rand);
+    if (r < F.rounds) {   // both stagger; someone gets pushed a little further
+      const pushed = rand() < .5 ? "A" : "B";
+      await Promise.all([move(R.A, pushed === "A" ? 26 : 34, 300, "ease-out"), move(R.B, pushed === "B" ? 74 : 66, 300, "ease-out"), tilt(R.A, 0), tilt(R.B, 0)]);
+      await sleep(400);
+    } else {
+      const out = lose === "A" ? 18 : 82;
+      await Promise.all([move(R[lose], out, 520, "cubic-bezier(.1,.8,.3,1)"), move(R[win], win === "A" ? 40 : 60, 300, "ease-out"),
+        R[lose].querySelector("img").animate([{ transform: "rotate(" + (lose === "A" ? -20 : 20) + "deg)" }, { transform: "rotate(" + (lose === "A" ? -8 : 8) + "deg) translateY(14%) scaleY(.82)" }], { duration: 520, fill: "forwards" }).finished]);
+      coins(R[lose], rand);
+      R[lose].querySelector(".stars").style.display = "block";
+      await tilt(R[win], 0);
+      R[win].querySelector("img").src = src(F[win.toLowerCase()], rand() < .5 ? "pose_td" : "pose_roof");
+      R[win].querySelector("img").animate([{ transform: "translateY(0)" }, { transform: "translateY(-12%)" }, { transform: "translateY(0)" }], { duration: 500, iterations: 3 });
+      msg.innerHTML = "<b>" + h(win === "A" ? F.an : F.bn) + "</b> wins " + F.pot + " RUTS!";
+    }
+  }
+  document.getElementById("again").hidden = false;
+}
+document.getElementById("again").onclick = play;
+for (const k of ["A", "B"]) R[k].querySelector("img").src = src(F[k.toLowerCase()]);
+play();
+`;
 
 const PAGE = `<!doctype html>
 <html lang="en">
@@ -279,11 +519,8 @@ td.n{font-variant-numeric:tabular-nums}
 .who{display:flex;align-items:center;gap:10px}.who img{width:30px;height:30px;border-radius:50%}
 .pct{display:flex;align-items:center;gap:8px}.pct span{height:6px;background:var(--gold);border-radius:3px}
 .empty{color:var(--muted);padding:40px;text-align:center}
-.pasture{position:relative;height:560px;border-radius:18px;overflow:hidden;border:1px solid var(--line);
-  background:radial-gradient(ellipse 60% 30% at 20% 34%,#3f9a4a 0 99%,transparent 100%),radial-gradient(ellipse 70% 32% at 85% 36%,#358a40 0 99%,transparent 100%),
-  linear-gradient(#6fb6ff 0,#a9d8ff 30%,#4caf50 30.2%,#2e7d32 100%)}
-.sun{position:absolute;right:8%;top:6%;width:70px;height:70px;border-radius:50%;background:#ffe27a;box-shadow:0 0 40px #ffe27a}
-.fence{position:absolute;left:0;right:0;top:31%;height:26px;background:repeating-linear-gradient(90deg,#8a5a3c 0 8px,transparent 8px 60px),linear-gradient(transparent 6px,#a8703f 6px 11px,transparent 11px 17px,#a8703f 17px 22px,transparent 22px)}
+.pasture{height:560px}
+${FIELD_CSS}
 .rw{position:absolute;width:150px;margin-left:-75px;margin-top:-150px;text-align:center;cursor:pointer;text-decoration:none;color:#fff}
 .rw img{width:150px;height:150px;display:block;transition:transform .25s}
 .rw span{display:inline-block;margin-top:-14px;background:rgba(0,0,0,.6);padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap}
@@ -299,6 +536,7 @@ td.n{font-variant-numeric:tabular-nums}
 <div class="sub" id="sub">Loading...</div>
 <nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="herd">Herd</button></nav>
 </div></header>
+<template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -329,17 +567,17 @@ function card(g, result) {
 // Herd: every ram wanders the pasture, pauses, wanders again. Lower on screen = closer = bigger.
 function pasture() {
   if (!herd) { view.innerHTML = '<div class="empty">Rounding up the herd...</div>'; return; }
-  sub.textContent = herd.rams.length + " rams in the pasture";
+  sub.textContent = herd.rams.length + " rams on the field";
   if (!herd.rams.length) { view.innerHTML = '<div class="empty">No rams yet. Open your first crate with /crate in Discord.</div>'; return; }
-  view.innerHTML = '<p class="note">Click a ram to see its gear. Get your own with /crate in Discord.</p><div class="pasture" id="pa"><div class="sun"></div><div class="fence"></div></div>';
+  view.innerHTML = '<p class="note">Click a ram to see its gear. Get your own with /crate in Discord, or settle it with /fight.</p><div class="pasture" id="pa"><div class="sun"></div><div class="fence"></div></div>';
   const pa = document.getElementById("pa"), still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const rnd = (a, b) => a + Math.random() * (b - a);
   const sheep = herd.rams.map((r) => {
     const el = document.createElement("a");
     el.className = "rw"; el.href = "/ram/" + r.id;
-    el.innerHTML = '<img src="/ram/' + r.id + '.svg?bare" alt=""><span>' + esc(r.name) + (r.points ? '<b>' + r.points + '</b>' : "") + '</span>';
+    el.innerHTML = '<img src="/ram/' + r.id + '.svg?bare" alt=""><span>' + esc(r.name) + (r.points ? '<b>' + r.points + ' RUTS</b>' : "") + '</span>';
     pa.appendChild(el);
-    return { el, img: el.firstChild, x: rnd(8, 92), y: rnd(48, 96), tx: 0, ty: 0, wait: rnd(0, 3) };
+    return { el, img: el.firstChild, x: rnd(14, 86), y: rnd(30, 96), tx: 0, ty: 0, wait: rnd(0, 3) };
   });
   sheep.forEach((s) => { s.tx = s.x; s.ty = s.y; });
   let last = performance.now();
@@ -350,11 +588,11 @@ function pasture() {
         if (s.wait > 0) s.wait -= dt;
         else {
           const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
-          if (d < 0.5) { s.wait = rnd(1.5, 5); s.tx = Math.max(6, Math.min(94, s.x + rnd(-30, 30))); s.ty = rnd(48, 96); }
+          if (d < 0.5) { s.wait = rnd(1.5, 5); s.tx = Math.max(14, Math.min(86, s.x + rnd(-30, 30))); s.ty = rnd(30, 96); }
           else { const v = 4 * dt / d; s.x += dx * v; s.y += dy * v * 0.6; }
         }
       }
-      const k = 0.62 + (s.y - 48) / 48 * 0.5;
+      const k = 0.6 + (s.y - 30) / 66 * 0.5;
       s.el.style.left = s.x + "%"; s.el.style.top = s.y + "%";
       s.el.style.transform = "scale(" + k.toFixed(3) + ")"; s.el.style.transformOrigin = "50% 100%";
       s.el.style.zIndex = Math.round(s.y * 10);

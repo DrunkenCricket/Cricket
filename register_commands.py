@@ -15,9 +15,12 @@ COMMANDS = [
     {"name": "mypicks", "description": "Your pick'em record, or someone else's", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose record to show", "required": False}]},
     # ram game
-    {"name": "points", "description": "Your points, crates and the points leaderboard", "type": 1, "contexts": [0],
-     "options": [{"type": 6, "name": "user", "description": "Whose points to show", "required": False}]},
-    {"name": "crate", "description": "Open a crate (your first one is free, then 60 points)", "type": 1, "contexts": [0]},
+    {"name": "ruts", "description": "Your RUTS, crates and the RUTS leaderboard", "type": 1, "contexts": [0],
+     "options": [{"type": 6, "name": "user", "description": "Whose RUTS to show", "required": False}]},
+    {"name": "locker", "description": "Your private ram locker on the website: crates, shopping and outfits", "type": 1, "contexts": [0]},
+    {"name": "fight", "description": "Challenge someone's ram: 50 RUTS each, winner takes all", "type": 1, "contexts": [0],
+     "options": [{"type": 6, "name": "opponent", "description": "Who to fight", "required": True}]},
+    {"name": "crate", "description": "Open a crate (your first one is free, then 60 RUTS)", "type": 1, "contexts": [0]},
     {"name": "inventory", "description": "Everything you've unlocked for your ram", "type": 1, "contexts": [0]},
     {"name": "equip", "description": "Put an item on your ram", "type": 1, "contexts": [0],
      "options": [{"type": 3, "name": "item", "description": "Start typing an item name", "required": True, "autocomplete": True}]},
@@ -33,7 +36,7 @@ COMMANDS = [
      "options": [{"type": 6, "name": "user", "description": "Whose ram", "required": False}]},
     {"name": "prop", "description": "Prop bets (admins)", "type": 1, "contexts": [0], "default_member_permissions": "32",
      "options": [
-         {"type": 1, "name": "create", "description": "Post a bet: PLAYER gets AMOUNT+ STAT. Entry 20 points, a hit wins a crate.", "options": [
+         {"type": 1, "name": "create", "description": "Post a bet: PLAYER gets AMOUNT+ STAT. Entry 20 RUTS, a hit wins a crate.", "options": [
              {"type": 3, "name": "player", "description": "Player name as ESPN shows it, e.g. Puka Nacua", "required": True},
              {"type": 3, "name": "stat", "description": "Stat", "required": True, "choices": [
                  {"name": n, "value": v} for v, n in [("rec_yds", "Receiving yards"), ("receptions", "Catches"), ("rec_td", "Receiving TDs"),

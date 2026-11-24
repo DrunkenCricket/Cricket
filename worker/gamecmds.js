@@ -1,16 +1,18 @@
 // Discord side of the ram game: slash commands, buttons and autocomplete. State lives in the Game Durable Object.
 import { ITEMS, RARITY, SLOT_NAMES, BODY_TYPES } from "./ram.js";
-import { CRATE_COST, PICK_POINTS, PROP_COST, STATS, propMessage } from "./game.js";
+import { CRATE_COST, PICK_POINTS, PROP_COST, FIGHT_STAKE, STATS, propMessage } from "./game.js";
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
-export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop"]);
+export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker"]);
 
 const game = (env) => env.GAME.get(env.GAME.idFromName("main"));
 const who = (i) => i.member?.user || i.user;
 const nameOf = (u) => u.global_name || u.username;
 const opt = (i, n) => (i.data.options || []).find((o) => o.name === n)?.value;
 const msg = (data, ephemeral = false) => ({ type: 4, data: { ...data, flags: ephemeral ? 64 : 0, allowed_mentions: { parse: [] } } });
+// Discord can't show SVG, so a free image proxy (wsrv.nl) turns the ram into a PNG.
+export const png = (svgUrl, w = 512) => `https://wsrv.nl/?url=${encodeURIComponent(svgUrl)}&output=png&w=${w}`;
 const err = (text) => msg({ content: text }, true);
 const color = (it) => RARITY[it.rarity]?.color ?? 0xff4fd8;
 const rarityName = (it) => RARITY[it.rarity]?.label || "SECRET";
@@ -18,20 +20,20 @@ const rarityName = (it) => RARITY[it.rarity]?.label || "SECRET";
 export async function gameCommand(i, env, ctx) {
   const g = game(env), me = who(i), uid = me.id, name = nameOf(me);
   switch (i.data.name) {
-    case "points": {
+    case "points": case "ruts": {
       await g.syncPicks();
       const target = opt(i, "user") || uid;
       const w = await g.wallet(target, target === uid ? name : undefined);
       const top = await g.leaders();
       return msg({ embeds: [{
-        title: `💰 ${w.user.name || "Points"}`,
-        description: `<@${target}>  **${w.user.points} points**  •  #${w.rank}\n📦 Crates waiting: **${w.user.crates}**  •  Items: **${w.items}**`,
+        title: `💰 ${w.user.name || "RUTS"}`,
+        description: `<@${target}>  **${w.user.points} RUTS**  •  #${w.rank}\n📦 Crates waiting: **${w.user.crates}**  •  Items: **${w.items}**`,
         color: GOLD,
         fields: [
-          { name: "Recent", value: w.recent.map((r) => `\`${r.delta >= 0 ? "+" : ""}${r.delta}\` ${r.reason}`).join("\n") || "Nothing yet. Correct picks pay 10.", inline: true },
+          { name: "Recent", value: w.recent.map((r) => `\`${r.delta >= 0 ? "+" : ""}${r.delta}\` ${r.reason}`).join("\n") || "Nothing yet. Correct picks pay 10 RUTS.", inline: true },
           { name: "Top 10", value: top.map((u, n) => `\`${n + 1}.\` <@${u.id}> ${u.points}`).join("\n") || "-", inline: true },
         ],
-        footer: { text: `+${PICK_POINTS} per correct pick  •  crate ${CRATE_COST}  •  bets ${PROP_COST}` },
+        footer: { text: `+${PICK_POINTS} RUTS per correct pick  •  crate ${CRATE_COST}  •  bets ${PROP_COST}  •  fights ${FIGHT_STAKE}` },
       }] });
     }
 
@@ -71,9 +73,24 @@ export async function gameCommand(i, env, ctx) {
       if (!r) return err(`<@${target}> doesn't have a ram yet.`);
       const worn = Object.entries(r.look).filter(([, v]) => ITEMS[v]).map(([s, v]) => `**${SLOT_NAMES[s] || s}:** ${ITEMS[v].name}`);
       return msg({
-        embeds: [{ title: `🐏 ${r.name}'s ram`, url: `${SITE}/ram/${target}`, color: GOLD,
+        embeds: [{ title: `🐏 ${r.name}'s ram`, url: `${SITE}/ram/${target}`, color: GOLD, image: { url: png(`${SITE}/ram/${target}.svg?v=${Date.now()}`) },
           description: (worn.join("\n") || "Fresh off the farm.") + `\n\n[See it move](${SITE}/ram/${target})` }],
       });
+    }
+
+    case "locker": {
+      const link = `${SITE}/locker#t=${await lockerToken(env, uid)}`;
+      return msg({ content: "Your locker: open crates, buy more with RUTS, and dress your ram. This link is just for you and works for 2 hours.",
+        components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Open my locker", emoji: { name: "🎒" } }] }] }, true);
+    }
+
+    case "fight": {
+      const opp = opt(i, "opponent");
+      const u = i.data.resolved?.users?.[opp];
+      if (u?.bot) return err("Bots don't have rams.");
+      const r = await g.challenge(uid, name, opp, u ? nameOf(u) : "Ram", i.channel_id || i.channel?.id);
+      if (r.error) return err(r.error);
+      return { type: 4, data: fightMessage(r.fight) };
     }
 
     case "prop": {
@@ -109,24 +126,69 @@ function crateReply(r, uid) {
   if (r.error) return err(r.error);
   const it = r.item;
   const lines = [
-    r.guaranteed ? "Your first crate always has a new look in it:" : r.bought ? `Bought for ${CRATE_COST} points.` : "",
+    r.guaranteed ? "Your first crate always has a new look in it:" : r.bought ? `Bought for ${CRATE_COST} RUTS.` : "",
     `# ${it.name}`,
     `**${rarityName(it)}** ${SLOT_NAMES[it.slot] || it.slot}`,
-    r.dupe ? `Already had it, so you got **+${r.refund} points** back.` : "",
-    `\n💰 ${r.user.points} points  •  📦 ${r.user.crates} crate${r.user.crates === 1 ? "" : "s"} left`,
+    r.dupe ? `Already had it, so you got **+${r.refund} RUTS** back.` : "",
+    `\n💰 ${r.user.points} RUTS  •  📦 ${r.user.crates} crate${r.user.crates === 1 ? "" : "s"} left`,
   ].filter(Boolean);
   const buttons = [];
   if (!r.dupe) buttons.push({ type: 2, style: 1, custom_id: `equip:${it.id}`, label: "Equip it" });
   buttons.push({ type: 2, style: 2, custom_id: "crate", label: r.user.crates > 0 ? "Open another" : `Buy another (${CRATE_COST})`, emoji: { name: "📦" } });
   buttons.push({ type: 2, style: 5, url: `${SITE}/ram/${uid}`, label: "See my ram" });
   return msg({
-    embeds: [{ title: "📦 Crate opened", description: lines.join("\n"), color: color(it) }],
+    embeds: [{ title: "📦 Crate opened", description: lines.join("\n"), color: color(it), image: { url: png(`${SITE}/ram/${uid}.svg?try=${it.id}&v=${Date.now()}`) } }],
     components: [{ type: 1, components: buttons }],
   }, true);
 }
 
+// Signed, expiring locker links: uid.expiry.signature (HMAC with a Worker secret, so nobody can forge one).
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function hmac(env, text) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode("locker:" + env.DISCORD_BOT_TOKEN), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return b64(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(text)));
+}
+export async function lockerToken(env, uid, hours = 2) {
+  const exp = Math.floor(Date.now() / 1000) + hours * 3600;
+  return `${uid}.${exp}.${await hmac(env, `${uid}.${exp}`)}`;
+}
+export async function lockerUser(env, token) {
+  const [uid, exp, sig] = String(token || "").split(".");
+  if (!uid || !exp || !sig || Number(exp) < Date.now() / 1000) return null;
+  return (await hmac(env, `${uid}.${exp}`)) === sig ? uid : null;
+}
+
+export function fightMessage(f) {
+  const pot = f.stake * 2;
+  const vs = `<@${f.a}> vs <@${f.b}>`;
+  if (f.status === "pending") return {
+    content: `<@${f.b}>`,
+    embeds: [{ title: "🐏💥🐏  Ram fight!", color: GOLD,
+      description: `<@${f.a}> challenges <@${f.b}> to butt heads.\n**${f.stake} RUTS** each, winner takes **${pot}**.\nChallenge expires <t:${Math.floor((f.created + 600_000) / 1000)}:R>.` }],
+    components: [{ type: 1, components: [
+      { type: 2, style: 3, custom_id: `fight:yes:${f.id}`, label: `Accept (${f.stake} RUTS)`, emoji: { name: "🐏" } },
+      { type: 2, style: 4, custom_id: `fight:no:${f.id}`, label: "Decline" }] }],
+    allowed_mentions: { users: [f.b] },
+  };
+  if (f.status === "done") return {
+    content: "",
+    embeds: [{ title: `🐏💥🐏  Fight #${f.id}`, color: GOLD, url: `${SITE}/fight/${f.id}`,
+      description: `${vs}\n\n**[Watch the fight](${SITE}/fight/${f.id})**\n\nWinner: ||<@${f.winner}> takes ${pot} RUTS||` }],
+    components: [{ type: 1, components: [{ type: 2, style: 5, url: `${SITE}/fight/${f.id}`, label: "Watch it", emoji: { name: "🥊" } }] }],
+    allowed_mentions: { parse: [] },
+  };
+  return { content: "", embeds: [{ title: "🐏  Fight called off", color: 0x6b7280,
+    description: `${vs}\n${f.status === "declined" ? "Declined" : f.status === "expired" ? "Nobody showed up" : "Cancelled"}. RUTS returned.` }], components: [], allowed_mentions: { parse: [] } };
+}
+
 export async function gameButton(i, env, ctx) {
   const g = game(env), me = who(i), uid = me.id, id = i.data.custom_id;
+  if (id.startsWith("fight:")) {
+    const [, act, fid] = id.split(":");
+    const r = act === "yes" ? await g.accept(Number(fid), uid, nameOf(me)) : await g.decline(Number(fid), uid);
+    if (r.error) return err(r.error);
+    return { type: 7, data: fightMessage(r.fight) };   // update the challenge message in place
+  }
   if (id === "crate") return crateReply(await g.openCrate(uid, nameOf(me)), uid);
   if (id.startsWith("equip:")) {
     const r = await g.equip(uid, id.slice(6));
@@ -144,7 +206,7 @@ export async function gameButton(i, env, ctx) {
       if (!res.ok) await fetch(`https://discord.com/api/v10/webhooks/${i.application_id}/${i.token}/messages/@original`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body });
     })());
-    return err(`You're in on bet #${propId} (-${PROP_COST}). If **${r.prop.player}** gets ${r.prop.line}+ ${STATS[r.prop.stat][2]}, you win a crate. Points left: **${r.user.points}**.`);
+    return err(`You're in on bet #${propId} (-${PROP_COST}). If **${r.prop.player}** gets ${r.prop.line}+ ${STATS[r.prop.stat][2]}, you win a crate. RUTS left: **${r.user.points}**.`);
   }
   return err("That button expired.");
 }
