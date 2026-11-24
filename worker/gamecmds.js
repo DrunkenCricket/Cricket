@@ -97,7 +97,7 @@ export async function gameCommand(i, env, ctx) {
           { name: "💰 RUTS", value: [line("/ruts", "your RUTS, crates and the top 10"), `Every pick'em vote = **${VOTE_POINTS} RUTS**, right picks **+${PICK_POINTS}** more. Weekly: most correct wins a **crate**, 2nd and 3rd get **${PODIUM_RUTS} RUTS** (ties share).`].join("\n") },
           { name: "🐏 Your ram", value: [line("/crate", `open a crate (first is free, then ${CRATE_COST} RUTS)`), line("/lockeroom", "the website locker: unbox, shop and dress your ram"),
             line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
-          { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet (entry ${PROP_COST} RUTS, a hit wins a crate)`), line("/prop cancel", "cancel a bet you posted"),
+          { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet: ${PROP_COST} RUTS to pick hits or misses, the right side wins a crate`), line("/prop cancel", "cancel a bet you posted"),
             line("/prop check", "settle finished bets now"), line("/fight", `challenge a ram: ${FIGHT_STAKE} RUTS each, winner takes all`)].join("\n") },
           { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "show !flag / !TD GIFs on the website")].join("\n") },
           { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Lockeroom](${SITE})` },
@@ -253,9 +253,10 @@ export async function gameButton(i, env, ctx) {
     const r = await g.equip(uid, id.slice(6));
     return r.error ? err(r.error) : msg({ content: `Equipped **${r.item.name}**. [See your ram](${SITE}/ram/${uid})` }, true);
   }
-  if (id.startsWith("prop:")) {
-    const propId = Number(id.slice(5));
-    const r = await g.enter(propId, uid, nameOf(me));
+  if (id.startsWith("prop:") || id.startsWith("propno:")) {
+    const side = id.startsWith("propno:") ? "no" : "yes";
+    const propId = Number(id.split(":")[1]);
+    const r = await g.enter(propId, uid, nameOf(me), side);
     if (r.error) return err(r.error);
     ctx.waitUntil((async () => {
       await g.saveMessage(propId, i.channel_id, i.message.id);
@@ -265,7 +266,8 @@ export async function gameButton(i, env, ctx) {
       if (!res.ok) await fetch(`https://discord.com/api/v10/webhooks/${i.application_id}/${i.token}/messages/@original`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body });
     })());
-    return err(`You're in on bet #${propId} (-${PROP_COST}). If **${shown(r.prop.player)}** gets ${r.prop.line}+ ${STATS[r.prop.stat][2]}, you win a crate. RUTS left: **${r.user.points}**.`);
+    const cond = side === "yes" ? `gets ${r.prop.line}+` : `finishes under ${r.prop.line}`;
+    return err(`You're in on bet #${propId} (-${PROP_COST}). If **${shown(r.prop.player)}** ${cond} ${STATS[r.prop.stat][2]}, you win a crate. RUTS left: **${r.user.points}**.`);
   }
   return err("That button expired.");
 }

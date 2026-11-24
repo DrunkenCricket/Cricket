@@ -650,7 +650,7 @@ td.n{font-variant-numeric:tabular-nums}
 .who{display:flex;align-items:center;gap:10px}.who img{width:30px;height:30px;border-radius:50%}
 .pct{display:flex;align-items:center;gap:8px}.pct span{height:6px;background:var(--gold);border-radius:3px}
 .empty{color:var(--muted);padding:40px;text-align:center}
-.bt{font-size:20px;font-weight:700;margin:4px 0 6px}.bt b{color:var(--gold)}.bet .faces{justify-content:flex-start}
+.srow{margin-top:6px}.bt{font-size:20px;font-weight:700;margin:4px 0 6px}.bt b{color:var(--gold)}.bet .faces{justify-content:flex-start}
 .bet.hit{border-color:var(--good)}.bet.miss,.bet.cancelled{opacity:.6}.rhit{color:var(--good);font-weight:700}.rmiss{color:#ef4444;font-weight:700}
 .fights{display:grid;gap:8px}.fight{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--text);text-decoration:none}
 .fight:hover{border-color:var(--gold)}.fight b{color:var(--gold)}.fight.expired,.fight.declined,.fight.cancelled{opacity:.55}.fight u{color:var(--gold)}
@@ -840,16 +840,16 @@ function pasture() {
 function betsView() {
   if (!bets) { view.innerHTML = '<div class="empty">Loading bets...</div>'; return; }
   const open = bets.filter((b) => b.status === "open");
-  sub.textContent = open.length + " open bet" + (open.length === 1 ? "" : "s") + " · 20 RUTS to enter, a hit wins a crate";
+  sub.textContent = open.length + " open bet" + (open.length === 1 ? "" : "s") + " · 20 RUTS to pick a side, the right side wins a crate";
   if (!bets.length && !fights.length) { view.innerHTML = '<div class="empty">No bets yet. Post one in Discord with /prop random or /prop auto.</div>'; return; }
+  const sideRow = (label, us, won) => '<div class="srow"><div class="count">' + label + " · " + us.length + (won && us.length ? " · each won a crate" : "") + "</div>" + (us.length ? faces(us) : "") + "</div>";
   const left = (t) => { const m = Math.round((t - Date.now()) / 60000); return m <= 0 ? "closed" : m < 60 ? m + "m left" : m < 1440 ? Math.round(m / 60) + "h left" : Math.round(m / 1440) + "d left"; };
   const card = (b) => {
     const st = b.status === "open" ? (b.closes > Date.now() ? '<span class="lock">Closes ' + when(new Date(b.closes)) + " · " + left(b.closes) + "</span>" : "Live · entries closed")
       : b.status === "hit" ? '<span class="rhit">HIT · ' + b.value + " " + esc(b.label) + "</span>" : b.status === "miss" ? '<span class="rmiss">Missed · ' + b.value + "</span>" : "Cancelled";
     return '<div class="game bet ' + b.status + '"><div class="meta"><span>Bet #' + b.id + " · " + esc(b.game) + "</span><span>" + st + "</span></div>"
       + '<div class="bt">' + esc(b.player) + " gets <b>" + b.line + "+</b> " + esc(b.label) + "</div>"
-      + '<div class="count">' + b.users.length + " in" + (b.status === "hit" && b.users.length ? " · each won a crate" : "") + "</div>"
-      + (b.users.length ? faces(b.users) : "") + "</div>";
+      + sideRow("✅ Hits", b.users.filter((u) => u.side !== "no"), b.status === "hit") + sideRow("❌ Misses", b.users.filter((u) => u.side === "no"), b.status === "miss") + "</div>";
   };
   const done = bets.filter((b) => b.status !== "open");
   const fightRow = (f) => {

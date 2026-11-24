@@ -86,6 +86,7 @@ export class Game extends DurableObject {
       CREATE TABLE IF NOT EXISTS fights (id INTEGER PRIMARY KEY AUTOINCREMENT, a TEXT, b TEXT, a_name TEXT, b_name TEXT, stake INTEGER,
         status TEXT DEFAULT 'pending', winner TEXT, rounds INTEGER, seed INTEGER, a_look TEXT, b_look TEXT, channel_id TEXT, created INTEGER);`);
     try { this.sql.exec("ALTER TABLE props ADD COLUMN created_by TEXT"); } catch {}
+    try { this.sql.exec("ALTER TABLE entries ADD COLUMN side TEXT DEFAULT 'yes'"); } catch {}   // yes = it hits, no = it misses
     try { this.sql.exec("ALTER TABLE fights ADD COLUMN token TEXT"); } catch {}       // to close the challenge message when it expires
     try { this.sql.exec("ALTER TABLE fights ADD COLUMN msg_id TEXT"); } catch {}   // who posted each bet (older bets: null)
   }
@@ -502,27 +503,33 @@ export class Game extends DurableObject {
     for (const p of [...(r.props || []), ...(wild.prop ? [wild.prop] : [])]) await this.postProp(p, ch);
   }
 
-  enter(propId, uid, name) {
+  /** Take a side: "yes" = they hit the line, "no" = they don't. 20 RUTS either way; the right side wins a crate. */
+  enter(propId, uid, name, side = "yes") {
     const p = this.one("SELECT * FROM props WHERE id=?", propId);
     if (!p) return { error: "That bet is gone." };
     if (p.status !== "open" || Date.now() > p.closes) return { error: "This bet is closed." };
-    if (this.one("SELECT 1 AS x FROM entries WHERE prop_id=? AND user_id=?", propId, uid)) return { error: "You're already in on this one." };
+    const mine = this.one("SELECT side FROM entries WHERE prop_id=? AND user_id=?", propId, uid);
+    if (mine) return { error: `You're already in on this one (${mine.side === "no" ? "against" : "for"} it).` };
     const u = this.user(uid, name);
     if (u.points < PROP_COST) return { error: `Entry is **${PROP_COST} RUTS**. You have **${u.points}**.` };
-    this.sql.exec("INSERT INTO entries (prop_id,user_id,ts) VALUES (?,?,?)", propId, uid, Date.now());
-    this.pay(`prop:${propId}:${uid}`, uid, -PROP_COST, `Bet #${propId}`);
+    this.sql.exec("INSERT INTO entries (prop_id,user_id,ts,side) VALUES (?,?,?,?)", propId, uid, Date.now(), side);
+    this.pay(`prop:${propId}:${uid}`, uid, -PROP_COST, `Bet #${propId} (${side === "no" ? "against" : "for"})`);
     return { prop: p, count: this.count(propId), user: this.one("SELECT * FROM users WHERE id=?", uid) };
   }
 
-  count(propId) { return this.one("SELECT COUNT(*) AS n FROM entries WHERE prop_id=?", propId).n; }
+  count(propId) {
+    const rows = this.all("SELECT COALESCE(side,'yes') AS side, COUNT(*) AS n FROM entries WHERE prop_id=? GROUP BY 1", propId);
+    return { yes: rows.find((r) => r.side === "yes")?.n || 0, no: rows.find((r) => r.side === "no")?.n || 0 };
+  }
 
+  /** Returns the winners: the "yes" side on a hit, the "no" side on a miss. */
   settle(p, hit, value) {
     this.sql.exec("UPDATE props SET status=?, value=? WHERE id=?", hit ? "hit" : "miss", value, p.id);
-    const players = this.all("SELECT user_id FROM entries WHERE prop_id=?", p.id).map((r) => r.user_id);
-    if (hit) for (const uid of players) {
-      if (this.pay(`propwin:${p.id}:${uid}`, uid, 0, `Won bet #${p.id}: a crate`)) this.sql.exec("UPDATE users SET crates = crates + 1 WHERE id=?", uid);
+    const winners = this.all("SELECT user_id FROM entries WHERE prop_id=? AND COALESCE(side,'yes')=?", p.id, hit ? "yes" : "no").map((r) => r.user_id);
+    for (const uid of winners) {
+      if (this.pay(`propwin:${p.id}:${uid}`, uid, 0, `Won bet #${p.id} (${hit ? "for" : "against"}): a crate`)) this.sql.exec("UPDATE users SET crates = crates + 1 WHERE id=?", uid);
     }
-    return players;
+    return winners;
   }
 
   /** Anyone can post bets, one per minute each, so the channel doesn't flood. */
@@ -554,14 +561,14 @@ export class Game extends DurableObject {
       if (v >= p.line) done.push({ p, hit: true, v, players: this.settle(p, true, v) });
       else if (box.state === "post") done.push({ p, hit: false, v, players: this.settle(p, false, v) });
     }
-    for (const d of done) await this.announce({ ...d.p, status: d.hit ? "hit" : "miss", value: d.v }, d.players);
+    for (const d of done) await this.announce({ ...d.p, status: d.hit ? "hit" : "miss", value: d.v }, d.players, this.count(d.p.id));
     return done.length;
   }
 
   // Edit the bet's message with the result. Interaction-response messages belong to the app, so the
   // bot can edit them by channel/message id; the webhook token works too for the first 15 minutes.
-  async announce(p, players) {
-    const msg = propMessage(p, players.length, players);
+  async announce(p, players, counts) {
+    const msg = propMessage(p, counts || this.count(p.id));
     const tries = [];
     if (p.channel_id && p.message_id) tries.push([`https://discord.com/api/v10/channels/${p.channel_id}/messages/${p.message_id}`, `Bot ${this.env.DISCORD_BOT_TOKEN}`]);
     if (p.token) tries.push([`https://discord.com/api/v10/webhooks/${APP_ID}/${p.token}/messages/@original`, null]);
@@ -569,10 +576,11 @@ export class Game extends DurableObject {
       const res = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json", ...(auth ? { Authorization: auth } : {}) }, body: JSON.stringify(msg) });
       if (res.ok) break;
     }
-    if (p.status === "hit" && players.length && p.channel_id) {
+    if ((p.status === "hit" || p.status === "miss") && players.length && p.channel_id) {
+      const what = p.status === "hit" ? `**${shown(p.player)}** hit ${p.line}+ ${STATS[p.stat][2]}!` : `**${shown(p.player)}** fell short with ${p.value} ${STATS[p.stat][2]}. The faders win!`;
       await fetch(`https://discord.com/api/v10/channels/${p.channel_id}/messages`, {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}` },
-        body: JSON.stringify({ content: `🎉 **${shown(p.player)}** hit ${p.line}+ ${STATS[p.stat][2]}! ${players.map((u) => `<@${u}>`).join(" ")} each won a crate!`,
+        body: JSON.stringify({ content: `🎉 ${what} ${players.map((u) => `<@${u}>`).join(" ")} each won a crate!`,
           components: [{ type: 1, components: [{ type: 2, style: 3, custom_id: "opencrate", label: "Open my crate", emoji: { name: "📦" } }] }],
           allowed_mentions: { users: players.slice(0, 100) } }),
       });
@@ -706,7 +714,7 @@ export class Game extends DurableObject {
     const rows = this.all("SELECT * FROM props WHERE status='open' OR created > ? ORDER BY (status='open') DESC, closes ASC LIMIT 40", Date.now() - 7 * 86400_000);
     return rows.map((p) => ({ id: p.id, player: shown(p.player), stat: p.stat, label: STATS[p.stat]?.[2] || p.stat, line: p.line, game: p.game,
       closes: p.closes, status: p.status, value: p.value,
-      users: this.all("SELECT e.user_id AS id, u.name FROM entries e LEFT JOIN users u ON u.id = e.user_id WHERE e.prop_id=? ORDER BY e.ts", p.id) }));
+      users: this.all("SELECT e.user_id AS id, u.name, COALESCE(e.side,'yes') AS side FROM entries e LEFT JOIN users u ON u.id = e.user_id WHERE e.prop_id=? ORDER BY e.ts", p.id) }));
   }
   herd() { return this.all("SELECT id, name, points FROM users"); }
   leaders() { return this.all("SELECT id, name, points FROM users ORDER BY points DESC LIMIT 10"); }
@@ -733,22 +741,26 @@ function expiredFight(f) {
     components: [], allowed_mentions: { parse: [] } };
 }
 
-export function propMessage(p, count, winners = []) {
+export function propMessage(p, count = {}) {
   const stat = STATS[p.stat][2];
+  const c = typeof count === "number" ? { yes: count, no: 0 } : { yes: count.yes || 0, no: count.no || 0 };
   p = { ...p, player: shown(p.player) };
   const ts = Math.floor(p.closes / 1000);
-  const result = p.status === "hit" ? `\n\n✅ **HIT** - ${p.value} ${stat}. ${count} winner${count === 1 ? "" : "s"} got a crate.`
-    : p.status === "miss" ? `\n\n❌ **MISSED** - finished with ${p.value} ${stat}.`
+  const plural = (n) => `${n} winner${n === 1 ? "" : "s"}`;
+  const result = p.status === "hit" ? `\n\n✅ **HIT** - ${p.value} ${stat}. ${plural(c.yes)} on the FOR side got a crate.`
+    : p.status === "miss" ? `\n\n❌ **MISSED** - finished with ${p.value} ${stat}. ${plural(c.no)} on the AGAINST side got a crate.`
     : p.status === "cancelled" ? "\n\n🚫 **Cancelled** - entries refunded." : "";
   const open = p.status === "open";
   return {
     embeds: [{
       title: `🎲 Bet #${p.id}: ${p.player} gets ${p.line}+ ${stat}`,
-      description: `${p.game}\nEntry: **${PROP_COST} RUTS**  •  Prize: **a crate**\n${open ? `Closes <t:${ts}:R>` : ""}${result}`,
+      description: `${p.game}\nPick a side: **${PROP_COST} RUTS**  •  Right side wins **a crate**\n${open ? `Closes <t:${ts}:R>` : ""}${result}`,
       color: p.status === "hit" ? 0x22c55e : p.status === "miss" ? 0xef4444 : GOLD,
-      footer: { text: `${count} in` },
+      footer: { text: `${c.yes} for  •  ${c.no} against` },
     }],
-    components: open ? [{ type: 1, components: [{ type: 2, style: 3, custom_id: `prop:${p.id}`, label: `Take the bet (${PROP_COST} RUTS)`, emoji: { name: "🎲" } }] }] : [],
+    components: open ? [{ type: 1, components: [
+      { type: 2, style: 3, custom_id: `prop:${p.id}`, label: `It hits (${PROP_COST})`, emoji: { name: "✅" } },
+      { type: 2, style: 4, custom_id: `propno:${p.id}`, label: `It misses (${PROP_COST})`, emoji: { name: "❌" } }] }] : [],
     allowed_mentions: { parse: [] },
   };
 }
