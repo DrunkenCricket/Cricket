@@ -1,12 +1,12 @@
 // Discord side of the ram game: slash commands, buttons and autocomplete. State lives in the Game Durable Object.
-import { ITEMS, RARITY, SLOT_NAMES, BODY_TYPES } from "./ram.js";
+import { ITEMS, RARITY, SLOT_NAMES, BODY_TYPES, FACES, FACE_NAMES } from "./ram.js";
 import { lockerToken, lockerUser } from "./auth.js";
 export { lockerToken, lockerUser };
 import { CRATE_COST, PICK_POINTS, VOTE_POINTS, PODIUM_RUTS, PROP_COST, FIGHT_STAKE, STATS, propMessage, shown } from "./game.js";
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
-export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts", "moments", "herdcommands", "bet"]);
+export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts", "moments", "herdcommands", "bet", "skin"]);
 
 const game = (env) => env.GAME.get(env.GAME.idFromName("main"));
 const who = (i) => i.member?.user || i.user;
@@ -66,6 +66,13 @@ export async function gameCommand(i, env, ctx) {
       return msg({ content: `Took off your ${SLOT_NAMES[opt(i, "slot")] || "item"}.` }, true);
     }
 
+    case "skin": {
+      const tone = opt(i, "tone");
+      if (!FACES[tone]) return err("Unknown skin tone.");
+      await g.setLook(uid, "face", tone);
+      return msg({ content: `Skin tone set to **${FACE_NAMES[tone]}**. [See your ram](${SITE}/ram/${uid})` }, true);
+    }
+
     case "body": {
       await g.setLook(uid, "body", opt(i, "type"));
       return msg({ content: `Body set to **${BODY_TYPES[opt(i, "type")]}**. [See your ram](${SITE}/ram/${uid})` }, true);
@@ -96,7 +103,7 @@ export async function gameCommand(i, env, ctx) {
           { name: "🏈 Pick'em", value: [line("/standings", "season leaderboard"), line("/mypicks", "your record and last week's picks")].join("\n") },
           { name: "💰 RUTS", value: [line("/ruts", "your RUTS, crates and the top 10"), `Every pick'em vote = **${VOTE_POINTS} RUTS**, right picks **+${PICK_POINTS}** more. Weekly: most correct wins a **crate**, 2nd and 3rd get **${PODIUM_RUTS} RUTS** (ties share).`].join("\n") },
           { name: "🐏 Your ram", value: [line("/crate", `open a crate (first is free, then ${CRATE_COST} RUTS)`), line("/lockeroom", "the website locker: unbox, shop and dress your ram"),
-            line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
+            line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/skin", "pick a skin tone (free)"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
           { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet: ${PROP_COST} RUTS to pick hits or misses, the right side wins a crate`), line("/prop cancel", "cancel a bet you posted"),
             line("/prop check", "settle finished bets now"), line("/fight", `challenge a ram: ${FIGHT_STAKE} RUTS each, winner takes all`)].join("\n") },
           { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "show !flag / !TD GIFs on the website")].join("\n") },

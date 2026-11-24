@@ -79,7 +79,10 @@ function tankPath(b) {
     Q ${cx} ${top + 132} ${iR} ${top} L ${oR} ${top} C ${oR + 6} ${top + 70}, ${oR + 40} ${top + 104}, 452 ${top + 104} L 452 520 L 60 520 Z`;
 }
 
-export const FACES = { tan: "#d9b98a", brown: "#a87a4f", dark: "#3d3330", gray: "#9a958f" };
+// Skin tones (face, ears, hands). Free for everyone; [skin, snout].
+export const FACES = { light: "#f1d9b8", tan: "#d9b98a", golden: "#c99a5b", brown: "#a87a4f", dark: "#6b4a35", deep: "#3d3330", gray: "#9a958f" };
+export const FACE_NAMES = { light: "Light", tan: "Tan", golden: "Golden", brown: "Brown", dark: "Dark", deep: "Deep", gray: "Gray" };
+const SNOUT = { light: "#fbeedd", tan: "#f1dfc0", golden: "#e8c999", brown: "#d6b08a", dark: "#9a7558", deep: "#6a5a52", gray: "#cdc8c1" };
 // Base looks. Boy is the free starter. The girl base is guaranteed from a player's first crate
 // (the backend hands out FIRST_CRATE instead of a random roll on crate #1).
 item("base_boy", "Boy Ram", "base", "common", { starter: true });
@@ -701,7 +704,7 @@ export function renderRam(look = {}, size = 512, t = null) {
     <path d="M 176 204 C 170 160, 210 136, 256 136 C 302 136, 342 160, 336 204 L 330 300 C 326 350, 296 380, 256 380 C 216 380, 186 350, 182 300 Z" fill="${faceC}" ${S}/>
     ${eyesBase}
     ${uncanny ? "" : `<g ${css ? 'class="a-blink"' : `opacity="${m.blink ? 1 : 0}"`}><ellipse cx="222" cy="252" rx="22" ry="25" fill="${faceC}" ${S}/><ellipse cx="290" cy="252" rx="22" ry="25" fill="${faceC}" ${S}/><path d="M 204 256 q 18 10 36 0 M 272 256 q 18 10 36 0" stroke="${OUT}" stroke-width="6" fill="none" stroke-linecap="round"/></g>`}
-    <ellipse cx="256" cy="324" rx="60" ry="46" fill="${look.face === "dark" ? "#6a5a52" : "#f1dfc0"}" ${S}/>
+    <ellipse cx="256" cy="324" rx="60" ry="46" fill="${SNOUT[look.face] || SNOUT.tan}" ${S}/>
     <ellipse cx="238" cy="312" rx="8" ry="6" fill="${OUT}"/><ellipse cx="274" cy="312" rx="8" ry="6" fill="${OUT}"/>
     ${uncanny ? "" : `<path d="M 234 342 Q 258 358 282 336" fill="none" stroke="${OUT}" stroke-width="7" stroke-linecap="round"/>`}
     ${marks?.face ? marks.fn(body) : ""}

@@ -49,6 +49,9 @@ COMMANDS = [
     {"name": "body", "description": "Pick your ram's body type", "type": 1, "contexts": [0],
      "options": [{"type": 3, "name": "type", "description": "Body type", "required": True, "choices": [
          {"name": "Thin", "value": "thin"}, {"name": "Medium", "value": "med"}, {"name": "Large", "value": "large"}]}]},
+    {"name": "skin", "description": "Pick your ram's skin tone (free, change it any time)", "type": 1, "contexts": [0],
+     "options": [{"type": 3, "name": "tone", "description": "Skin tone", "required": True, "choices": [
+         {"name": n, "value": v} for v, n in [("light", "Light"), ("tan", "Tan"), ("golden", "Golden"), ("brown", "Brown"), ("dark", "Dark"), ("deep", "Deep"), ("gray", "Gray")]]}]},
     {"name": "ram", "description": "Show a ram", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose ram", "required": False}]},
     {"name": "bet", "description": "Post a random prop bet. 20 RUTS to pick hits or misses; the right side wins a crate.", "type": 1, "contexts": [0]},

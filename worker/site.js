@@ -5,7 +5,7 @@
 //
 // Needs the DISCORD_BOT_TOKEN Worker secret to read poll voters, avatars and logo emojis.
 
-import { renderRam, ITEMS, SLOT_NAMES, RARITY, BODY_TYPES, DEFAULT_LOOK } from "./ram.js";
+import { renderRam, ITEMS, SLOT_NAMES, RARITY, BODY_TYPES, DEFAULT_LOOK, FACES, FACE_NAMES } from "./ram.js";
 import { lockerUser } from "./gamecmds.js";
 import { CRATE_COST } from "./game.js";
 
@@ -213,6 +213,8 @@ async function lockerApi(request, env) {
     await g.setLook(uid, body.slot, null);
   } else if (body.op === "body" && BODY_TYPES[body.type]) {
     await g.setLook(uid, "body", body.type);
+  } else if (body.op === "skin" && FACES[body.tone]) {
+    await g.setLook(uid, "face", body.tone);
   }
   return json({ uid, ...(await g.locker(uid)), ...extra }, 0);
 }
@@ -363,6 +365,7 @@ function lockerFront() {
 function lockerPage() {
   const meta = {
     slots: SLOT_NAMES, bodies: BODY_TYPES, cost: CRATE_COST, defaults: DEFAULT_LOOK,
+    skins: Object.fromEntries(Object.keys(FACES).map((k) => [k, [FACE_NAMES[k], FACES[k]]])),
     rarity: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, { label: v.label, weight: v.weight, color: "#" + v.color.toString(16).padStart(6, "0") }])),
     // every crate item, for the spinning reel
     // the whole catalog (the secret finish stays hidden until someone owns it); [id, name, slot, rarity, starter]
@@ -386,7 +389,8 @@ h1{margin:0;font:900 clamp(24px,5vw,40px)/1 system-ui,sans-serif;letter-spacing:
 @keyframes bub{from{transform:translateY(0);opacity:.9}to{transform:translateY(-120px);opacity:0}}
 .lr-ram{position:absolute;bottom:6%;left:30%;width:min(34vw,280px);transform:translateX(-50%);z-index:12}
 .lr-ram img{width:100%;display:block;transform-origin:50% 90%}
-.crate{position:absolute;bottom:9%;left:58%;width:min(20vw,160px);transform:translateX(-50%);z-index:4}
+.crate{position:absolute;bottom:5%;left:60%;width:min(26vw,220px);transform:translateX(-50%);z-index:4}
+.crate .wheel{transform-box:fill-box;transform-origin:center}.crate.rolling .wheel{animation:spin .35s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 .crate svg{width:100%;display:block}.crate .lid{transform-box:fill-box;transform-origin:0% 100%}
 .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8}
 .word{position:absolute;left:58%;top:22%;transform:translateX(-50%);z-index:9;font:900 clamp(28px,6vw,60px)/1 system-ui;color:#ffd400;-webkit-text-stroke:3px #15172b;opacity:0;pointer-events:none}
@@ -403,6 +407,7 @@ h1{margin:0;font:900 clamp(24px,5vw,40px)/1 system-ui,sans-serif;letter-spacing:
 .bar{display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap}
 button{background:var(--card2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:600 14px system-ui;cursor:pointer}
 button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45;cursor:default}
+.skins{display:inline-flex;gap:6px;align-items:center}.sk{width:28px;height:28px;padding:0;border-radius:50%;border:2px solid var(--line)}.sk.on{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
 .buy{background:var(--gold);color:#111;border:0;font-size:17px;padding:13px 22px;font-weight:800}
 .reveal{display:none;margin-left:auto;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-left:5px solid;border-radius:12px;padding:8px 12px}
 .reveal b{font-size:17px}.reveal small{display:block;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:11px}
@@ -417,13 +422,24 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 <body><main><h1>THE <span>LOCKEROOM</span></h1><div class="sub" id="sub">Loading...</div>
 <div class="room" id="room">${lockerScene()}<div id="showers"></div>${lockerFront()}
 <div class="lr-ram" id="ram"><img alt="Your ram"></div>
-<div class="crate" id="crate"><svg viewBox="0 0 120 110"><g class="lid"><rect x="4" y="14" width="112" height="20" rx="4" fill="#0a2560" stroke="#15172b" stroke-width="4"/><rect x="4" y="14" width="112" height="6" fill="#ffc82c"/></g>
-<rect x="8" y="32" width="104" height="72" rx="6" fill="#123a8f" stroke="#15172b" stroke-width="4"/><path d="M8 32 L112 104 M112 32 L8 104" stroke="#0a2560" stroke-width="8"/>
-<rect x="8" y="32" width="104" height="72" rx="6" fill="none" stroke="#ffc82c" stroke-width="3" stroke-dasharray="10 6"/>
-<circle cx="60" cy="68" r="20" fill="#ffc82c" stroke="#15172b" stroke-width="4"/><path d="M52 62 c-8 -10 -20 -4 -16 6 M68 62 c8 -10 20 -4 16 6" stroke="#15172b" stroke-width="5" fill="none" stroke-linecap="round"/><text x="60" y="76" text-anchor="middle" font-family="system-ui" font-weight="900" font-size="18" fill="#15172b">?</text></svg></div>
+<div class="crate" id="crate"><svg viewBox="0 0 170 150" overflow="visible">
+<path d="M 18 44 L 152 44 L 140 112 L 30 112 Z" fill="#9aa3b2" stroke="#15172b" stroke-width="4" stroke-linejoin="round"/>
+<path d="M 22 50 L 148 50 L 137 106 L 33 106 Z" fill="#c9d3ea"/>
+<path d="M 34 58 L 136 58 M 36 72 L 134 72 M 38 86 L 132 86 M 40 100 L 130 100" stroke="#9aa3b2" stroke-width="2"/>
+<rect x="54" y="66" width="62" height="26" rx="4" fill="#ffc82c" stroke="#15172b" stroke-width="3"/><text x="85" y="84" text-anchor="middle" font-family="system-ui" font-weight="900" font-size="10" fill="#003594">LAUNDRY</text>
+<path d="M 12 40 L 158 40" stroke="#cfd6e0" stroke-width="7" stroke-linecap="round"/><path d="M 12 40 L 158 40" stroke="#15172b" stroke-width="2" stroke-dasharray="0" opacity=".25"/>
+<path d="M 152 44 C 160 40, 166 30, 162 18" fill="none" stroke="#cfd6e0" stroke-width="6" stroke-linecap="round"/>
+<path d="M 30 112 L 140 112" stroke="#6b7280" stroke-width="6"/>
+<g class="lid">
+<path d="M 30 44 C 34 20, 64 14, 74 30 C 80 10, 112 12, 116 34 C 130 24, 150 34, 142 48 Z" fill="#f4f1ea" stroke="#15172b" stroke-width="3"/>
+<path d="M 52 40 L 66 22 L 86 22 L 98 40 Z" fill="#003594" stroke="#15172b" stroke-width="3"/><text x="77" y="38" text-anchor="middle" font-family="system-ui" font-weight="900" font-size="12" fill="#ffc82c">?</text>
+<path d="M 104 46 C 110 30, 126 28, 134 40" fill="none" stroke="#ffc82c" stroke-width="7" stroke-linecap="round"/>
+<path d="M 30 46 C 22 50, 18 62, 24 70" fill="none" stroke="#ff7fb0" stroke-width="7" stroke-linecap="round"/></g>
+<g class="wheels">${[38, 132].map((x) => `<g transform="translate(${x} 126)"><path d="M 0 -14 L 0 -6" stroke="#6b7280" stroke-width="5"/><g class="wheel"><circle r="10" fill="#2b2b33" stroke="#15172b" stroke-width="3"/><path d="M -6 0 L 6 0 M 0 -6 L 0 6" stroke="#9aa3b2" stroke-width="2"/></g></g>`).join("")}</g>
+</svg></div>
 <div class="flash" id="flash"></div><div class="word" id="word">BONK!</div>
 <div class="reel" id="reel"><div class="strip" id="strip"></div><div class="mark"></div></div></div>
-<div class="bar"><button class="buy" id="buy">Open crate</button><span id="bodies"></span><span class="err" id="err"></span>
+<div class="bar"><button class="buy" id="buy">Open crate</button><span id="bodies"></span><span id="skins" class="skins"></span><span class="err" id="err"></span>
 <div class="reveal" id="rev"></div></div>
 <div class="card0"><div class="chips" id="chips"></div><div class="grid" id="grid"></div></div>
 <p><a href="/">Pick'em</a> · <a href="/#herd">See the herd</a></p></main>
@@ -454,6 +470,7 @@ async function call(op, extra) {
 function draw() {
   $("sub").innerHTML = h(S.name || "Your ram") + " · <b>" + S.points + " RUTS</b> · " + S.crates + " crate" + (S.crates === 1 ? "" : "s") + " waiting · " + S.items.length + " items · 🎯 Rare+ in " + (10 - (S.opened % 10)) + (10 - (S.opened % 10) === 1 ? " crate" : " crates");
   $("bodies").innerHTML = Object.entries(M.bodies).map(([k, n]) => '<button data-b="' + k + '" class="' + ((S.look.body || "med") === k ? "on" : "") + '">' + n + "</button>").join(" ");
+  $("skins").innerHTML = Object.entries(M.skins).map(([k, [n, c]]) => '<button class="sk' + ((S.look.face || "tan") === k ? " on" : "") + '" data-skin="' + k + '" title="' + n + '" style="background:' + c + '"></button>').join("");
   const b = $("buy");
   if (!busy) { b.textContent = S.crates > 0 ? "📦 Open crate (" + S.crates + ")" : "📦 Buy crate · " + M.cost + " RUTS"; b.disabled = S.crates < 1 && S.points < M.cost; }
   // Wardrobe: every section, every option. Owned items wear on click; locked ones show what's out there.
@@ -494,8 +511,10 @@ async function unbox() {
   $("flash").animate([{ opacity: .8 }, { opacity: 0 }], { duration: 250 });
   $("word").animate([{ opacity: 0, transform: "translateX(-50%) scale(.4)" }, { opacity: 1, transform: "translateX(-50%) scale(1.2)", offset: .3 }, { opacity: 0, transform: "translateX(-50%) scale(1)" }], { duration: 700 });
   $("room").animate([{ transform: "translate(0)" }, { transform: "translate(-8px,4px)" }, { transform: "translate(7px,-4px)" }, { transform: "translate(0)" }], { duration: 240 });
-  crate.querySelector(".lid").animate([{ transform: "translate(0,0) rotate(0)" }, { transform: "translate(30px,-60px) rotate(-50deg)", opacity: 0 }], { duration: 600, fill: "forwards" });
-  crate.animate([{ transform: "translateX(-50%) scale(1)" }, { transform: "translateX(-50%) scale(1.15,.85)" }, { transform: "translateX(-50%) scale(1)" }], { duration: 300 });
+  crate.querySelector(".lid").animate([{ transform: "translate(0,0) rotate(0)" }, { transform: "translate(10px,-70px) rotate(-25deg)", opacity: 1, offset: .6 }, { transform: "translate(20px,-90px) rotate(-40deg)", opacity: 0 }], { duration: 700, fill: "forwards" });
+  crate.classList.add("rolling");   // the cart rolls back from the hit, then settles
+  crate.animate([{ transform: "translateX(-50%)" }, { transform: "translateX(-10%) rotate(3deg)" }, { transform: "translateX(-40%) rotate(-1deg)" }, { transform: "translateX(-50%)" }],
+    { duration: 900, easing: "ease-out" }).finished.then(() => crate.classList.remove("rolling"));
   ramEl.animate([{ left: "44%" }, { left: "30%" }], { duration: 450, easing: "ease-out", fill: "forwards" });
   img.animate([{ transform: "rotate(14deg)" }, { transform: "rotate(0)" }], { duration: 300, fill: "forwards" });
   const d = await reqP;
@@ -538,6 +557,7 @@ document.addEventListener("click", (e) => {
   const t = e.target.closest("button"); if (!t || busy) return;
   if (t.id === "buy") unbox();
   else if (t.dataset.b) call("body", { type: t.dataset.b });
+  else if (t.dataset.skin) call("skin", { tone: t.dataset.skin });
   else if (t.dataset.f) { filter = t.dataset.f; draw(); }
   else if (t.dataset.i) t.classList.contains("on") ? call("unequip", { slot: t.dataset.s }) : call("equip", { item: t.dataset.i });
 });
