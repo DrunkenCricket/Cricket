@@ -136,10 +136,36 @@ for (const shape of Object.keys(HORN_PATHS)) {
       { shape, color, ridge, fire: fk === "fire" });
   }
 }
+// Sharpened horns: same shapes, but the end tapers to a point along the horn's last direction.
+const POINT_FINISHES = [
+  ["natural", "", "#c8a46a", "#7e5f32", "rare"], ["ivory", "Ivory", "#f3ead6", "#b9a77f", "rare"],
+  ["obsidian", "Obsidian", "#2b2b33", "#000000", "epic"], ["gold", "Gold", "#ffc82c", "#c48a00", "legendary"],
+];
+// Curled shapes get a tail that sweeps out so the point actually shows.
+const SHARP_PATHS = {
+  curl: "M 205 168 C 150 96, 54 118, 54 204 C 52 246, 66 276, 92 300",
+  small: "M 200 166 C 168 126, 112 136, 112 184 C 110 212, 118 232, 136 250",
+  spiral: "M 214 156 C 206 112, 184 76, 190 28",
+};
+const SHARP_NAMES = { curl: "Big Curl", small: "Lil Curl", sweep: "Blade", goat: "Spike", devil: "Devil", spiral: "Drill" };
+for (const shape of Object.keys(HORN_PATHS)) {
+  for (const [fk, fname, color, ridge, rarity] of POINT_FINISHES) {
+    item(`horns_${shape}_sharp${fk === "natural" ? "" : "_" + fk}`, `${fname ? fname + " " : ""}Sharp ${SHARP_NAMES[shape]} Horns`, "horns", rarity, { shape, color, ridge, point: true, path: SHARP_PATHS[shape] });
+  }
+}
+function hornTip(d, w, grow) {
+  const n = d.match(/-?[\d.]+/g).map(Number), [x2, y2, x, y] = n.slice(-4);
+  const L = Math.hypot(x - x2, y - y2) || 1, ux = (x - x2) / L, uy = (y - y2) / L, px = -uy, py = ux;
+  const half = (w + grow) / 2, len = w * 1.5 + grow, bx = x - ux * 2, by = y - uy * 2;
+  const f = (v) => v.toFixed(1);
+  return `M ${f(bx + px * half)} ${f(by + py * half)} L ${f(x + ux * len)} ${f(y + uy * len)} L ${f(bx - px * half)} ${f(by - py * half)} Z`;
+}
 function hornLayer(h = ITEMS.horns_curl) {
-  const d = HORN_PATHS[h.shape], w = HORN_W[h.shape];
-  const one = `<path d="${d}" fill="none" stroke="${OUT}" stroke-width="${w + 15}" stroke-linecap="round"/>
-    <path d="${d}" fill="none" stroke="${h.color}" stroke-width="${w}" stroke-linecap="round"/>
+  const d = h.path || HORN_PATHS[h.shape], w = HORN_W[h.shape], cap = h.point ? "butt" : "round";
+  const one = `<path d="${d}" fill="none" stroke="${OUT}" stroke-width="${w + 15}" stroke-linecap="${cap}"/>
+    ${h.point ? `<path d="${hornTip(d, w, 15)}" fill="${OUT}"/>` : ""}
+    <path d="${d}" fill="none" stroke="${h.color}" stroke-width="${w}" stroke-linecap="${cap}"/>
+    ${h.point ? `<path d="${hornTip(d, w, 0)}" fill="${h.color}"/>` : ""}
     <path d="${d}" fill="none" stroke="${h.ridge}" stroke-opacity=".45" stroke-width="${w}" stroke-dasharray="5 14"/>
     ${h.fire ? `<path d="${d}" fill="none" stroke="#ffe14d" stroke-width="${w / 3}" stroke-linecap="round" opacity=".8"/>` : ""}`;
   return one + mirror(one);

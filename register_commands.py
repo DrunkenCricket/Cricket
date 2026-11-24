@@ -17,7 +17,7 @@ COMMANDS = [
     # ram game
     {"name": "ruts", "description": "Your RUTS, crates and the RUTS leaderboard", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose RUTS to show", "required": False}]},
-    {"name": "locker", "description": "Your private ram locker on the website: crates, shopping and outfits", "type": 1, "contexts": [0]},
+    {"name": "lockeroom", "description": "The Lockeroom: unbox crates, shop with RUTS and dress your ram on the website", "type": 1, "contexts": [0]},
     {"name": "fight", "description": "Challenge someone's ram: 50 RUTS each, winner takes all", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "opponent", "description": "Who to fight", "required": True}]},
     {"name": "crate", "description": "Open a crate (your first one is free, then 60 RUTS)", "type": 1, "contexts": [0]},

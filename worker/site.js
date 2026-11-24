@@ -220,7 +220,7 @@ async function lockerApi(request, env) {
 export async function handleSite(request, env, ctx) {
   const { pathname } = new URL(request.url);
   if (pathname === "/api/locker" && request.method === "POST" && env.GAME) return lockerApi(request, env);
-  if (pathname === "/locker") return new Response(lockerPage(), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
+  if (pathname === "/locker" || pathname === "/lockeroom") return new Response(lockerPage(), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
   try {
     if (pathname === "/api/week") return json(await weekData(env, ctx), 60);
     if (pathname === "/api/history") return json(await historyData(env, ctx), 120);
@@ -228,11 +228,16 @@ export async function handleSite(request, env, ctx) {
   } catch (e) {
     return json({ error: String(e.message || e) }, 10);
   }
-  const ram = pathname.match(/^\/ram\/(\d{5,25})(\.svg)?$/);
+  // /ram/ID (page), /ram/ID.svg, and /ram/ID/OPTS~STAMP.svg where OPTS is "now", "bare" or an item id to try on.
+  // The path form exists because the PNG proxy Discord uses drops query strings.
+  const pathOpts = pathname.match(/^\/ram\/(\d{5,25})\/([a-z0-9_]+?)(-bare)?~\d+\.svg$/);
+  const ram = pathOpts ? [pathname, pathOpts[1], ".svg"] : pathname.match(/^\/ram\/(\d{5,25})(\.svg)?$/);
   if (ram && env.GAME) {
     const r = await env.GAME.get(env.GAME.idFromName("main")).look(ram[1]);
     const look = { ...(r?.look || {}) };
     const q = new URL(request.url).searchParams;
+    if (pathOpts?.[2] === "bare" || pathOpts?.[3]) q.set("bare", "1");
+    if (pathOpts && ITEMS[pathOpts[2]]) q.set("try", pathOpts[2]);
     if (q.has("bare")) look.bg = "none";                                   // Herd pasture and fights
     if (ITEMS[q.get("pose")]?.slot === "pose") look.pose = q.get("pose");  // fight celebrations
     const tryOn = ITEMS[q.get("try")];                                     // crate reveal: wear the new item
@@ -283,81 +288,158 @@ const FIELD = `<div class="ez l"><b>RAMS</b></div><div class="ez r"><b>HERD</b><
   + [10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, i) => `<div class="num" style="left:${16.4 + i * 8.4}%">${n}</div>`).join("");
 
 function lockerPage() {
-  const meta = { slots: SLOT_NAMES, rarity: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, { label: v.label, color: "#" + v.color.toString(16).padStart(6, "0") }])), bodies: BODY_TYPES, cost: CRATE_COST };
+  const meta = {
+    slots: SLOT_NAMES, bodies: BODY_TYPES, cost: CRATE_COST,
+    rarity: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, { label: v.label, weight: v.weight, color: "#" + v.color.toString(16).padStart(6, "0") }])),
+    // every crate item, for the spinning reel
+    items: Object.values(ITEMS).filter((i) => i.slot !== "base" && i.rarity !== "secret").map((i) => [i.id, i.name, i.slot, i.rarity]),
+  };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ram Locker</title><meta name="robots" content="noindex">
-<style>:root{--bg:#0d1328;--card:#151d3b;--card2:#1c2650;--line:#26315f;--ink:#eef2ff;--dim:#9aa6c7;--gold:#ffc82c}
+<title>The Lockeroom</title><meta name="robots" content="noindex">
+<style>:root{--bg:#0b1024;--card:#151d3b;--card2:#1c2650;--line:#26315f;--ink:#eef2ff;--dim:#9aa6c7;--gold:#ffc82c;--blue:#003594}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,sans-serif;padding:16px}
-main{max-width:1080px;margin:0 auto}h1{margin:0 0 4px;font-size:clamp(22px,4vw,30px)}.sub{color:var(--dim);margin-bottom:16px}.sub b{color:var(--gold)}
-.cols{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:16px}@media (max-width:760px){.cols{grid-template-columns:1fr}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
-.me img{width:100%;border-radius:12px;display:block;background:#1b2440}
-.seg{display:flex;gap:6px;margin:12px 0}.seg button{flex:1}
+main{max-width:1100px;margin:0 auto}
+h1{margin:0;font:900 clamp(24px,5vw,40px)/1 system-ui,sans-serif;letter-spacing:2px}h1 span{color:var(--gold)}
+.sub{color:var(--dim);margin:6px 0 14px}.sub b{color:var(--gold)}
+/* the room: a wall of lockers, a bench, a floor */
+.room{position:relative;height:min(62vw,470px);min-height:330px;border-radius:18px;overflow:hidden;border:1px solid var(--line);
+  background:linear-gradient(#0000 0 74%,#5a3b22 74% 77%,#3b2716 77% 78%,#2a2f3d 78%),
+  repeating-linear-gradient(90deg,#123a8f 0 calc(12.5% - 6px),#0a2560 calc(12.5% - 6px) 12.5%)}
+.room::before{content:"";position:absolute;inset:0 0 26% 0;background:
+  repeating-linear-gradient(90deg,#0000 0 3%,rgba(0,0,0,.35) 3% 3.4%,#0000 3.4% 12.5%) 0 14%/100% 8% no-repeat,
+  repeating-linear-gradient(#0000 0 6px,rgba(0,0,0,.28) 6px 9px) 2% 12%/7% 10% repeat-x,
+  linear-gradient(90deg,#0000 0 9.6%,#c9d3ea 9.6% 10.4%,#0000 10.4%) 0 48%/12.5% 12% repeat-x}
+.room::after{content:"";position:absolute;left:0;right:0;top:0;height:7%;background:linear-gradient(#0a1a40,#123a8f);box-shadow:0 4px 10px rgba(0,0,0,.5)}
+.bench{position:absolute;left:6%;right:6%;bottom:24%;height:4%;background:#a8703f;border-radius:6px;box-shadow:0 6px 0 #6b4423}
+.nums{position:absolute;left:0;right:0;top:9%;display:grid;grid-template-columns:repeat(8,1fr);text-align:center;font:800 13px system-ui;color:var(--gold);opacity:.85}
+.lr-ram{position:absolute;bottom:6%;left:30%;width:min(34vw,280px);transform:translateX(-50%);z-index:4}
+.lr-ram img{width:100%;display:block;transform-origin:50% 90%}
+.crate{position:absolute;bottom:9%;left:70%;width:min(20vw,160px);transform:translateX(-50%);z-index:3}
+.crate svg{width:100%;display:block}.crate .lid{transform-box:fill-box;transform-origin:0% 100%}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8}
+.word{position:absolute;left:58%;top:22%;transform:translateX(-50%);z-index:9;font:900 clamp(28px,6vw,60px)/1 system-ui;color:#ffd400;-webkit-text-stroke:3px #15172b;opacity:0;pointer-events:none}
+/* the reel */
+.reel{position:absolute;left:0;right:0;top:50%;height:150px;margin-top:-75px;background:rgba(5,8,20,.92);border-top:2px solid var(--gold);border-bottom:2px solid var(--gold);
+  overflow:hidden;z-index:10;display:none}
+.reel .strip{position:absolute;top:10px;left:0;display:flex;gap:8px;will-change:transform}
+.reel .card{width:130px;height:126px;flex:none;border-radius:10px;background:linear-gradient(#1c2650,#121937);border-bottom:5px solid;padding:10px;display:flex;flex-direction:column;justify-content:space-between}
+.reel .card .e{font-size:38px;line-height:1;text-align:center}.reel .card .n{font-weight:700;font-size:13px;line-height:1.15}.reel .card .r{font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase}
+.reel .card.win{box-shadow:0 0 0 3px var(--gold),0 0 30px var(--gold)}
+.reel .mark{position:absolute;left:50%;top:0;bottom:0;width:3px;margin-left:-1.5px;background:var(--gold);box-shadow:0 0 12px var(--gold);z-index:2}
+.reel .mark::before,.reel .mark::after{content:"";position:absolute;left:-8px;border:9px solid transparent}
+.reel .mark::before{top:0;border-top-color:var(--gold)}.reel .mark::after{bottom:0;border-bottom-color:var(--gold)}
+.bar{display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap}
 button{background:var(--card2);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:600 14px system-ui;cursor:pointer}
 button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45;cursor:default}
-.buy{width:100%;background:var(--gold);color:#111;border:0;font-size:16px;padding:12px}
-.reveal{margin-top:12px;display:none;text-align:center}.reveal img{width:100%;max-width:260px;border-radius:12px}
-.reveal h2{margin:6px 0 2px;font-size:22px}.tagr{font-weight:800;font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.buy{background:var(--gold);color:#111;border:0;font-size:17px;padding:13px 22px;font-weight:800}
+.reveal{display:none;margin-left:auto;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-left:5px solid;border-radius:12px;padding:8px 12px}
+.reveal b{font-size:17px}.reveal small{display:block;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:11px}
+.card0{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.chips button{padding:6px 10px;font-size:13px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
 .it{text-align:left;padding:10px;border-left-width:4px}.it small{display:block;color:var(--dim);font-weight:500;margin-top:2px}
 .it.on{background:#24305f;box-shadow:inset 0 0 0 1px var(--gold)}.it.on::after{content:" ✓";color:var(--gold)}
-.err{color:#ff8080;min-height:20px;margin-top:8px}.empty{color:var(--dim);padding:24px;text-align:center}a{color:var(--gold)}</style></head>
-<body><main><h1 id="title">🎒 Ram Locker</h1><div class="sub" id="sub">Loading...</div>
-<div class="cols"><div class="card me"><img id="ram" alt="Your ram">
-<div class="seg" id="bodies"></div>
-<button class="buy" id="buy">Open crate</button><div class="err" id="err"></div>
+.err{color:#ff8080}.empty{color:var(--dim);padding:24px;text-align:center}a{color:var(--gold)}
+@media (prefers-reduced-motion:reduce){.reel .strip{transition:none!important}}</style></head>
+<body><main><h1>THE <span>LOCKEROOM</span></h1><div class="sub" id="sub">Loading...</div>
+<div class="room" id="room"><div class="nums">${[12, 99, 7, 24, 33, 81, 10, 2].map((n) => `<span>${n}</span>`).join("")}</div><div class="bench"></div>
+<div class="lr-ram" id="ram"><img alt="Your ram"></div>
+<div class="crate" id="crate"><svg viewBox="0 0 120 110"><g class="lid"><rect x="4" y="14" width="112" height="20" rx="4" fill="#0a2560" stroke="#15172b" stroke-width="4"/><rect x="4" y="14" width="112" height="6" fill="#ffc82c"/></g>
+<rect x="8" y="32" width="104" height="72" rx="6" fill="#123a8f" stroke="#15172b" stroke-width="4"/><path d="M8 32 L112 104 M112 32 L8 104" stroke="#0a2560" stroke-width="8"/>
+<rect x="8" y="32" width="104" height="72" rx="6" fill="none" stroke="#ffc82c" stroke-width="3" stroke-dasharray="10 6"/>
+<circle cx="60" cy="68" r="20" fill="#ffc82c" stroke="#15172b" stroke-width="4"/><path d="M52 62 c-8 -10 -20 -4 -16 6 M68 62 c8 -10 20 -4 16 6" stroke="#15172b" stroke-width="5" fill="none" stroke-linecap="round"/><text x="60" y="76" text-anchor="middle" font-family="system-ui" font-weight="900" font-size="18" fill="#15172b">?</text></svg></div>
+<div class="flash" id="flash"></div><div class="word" id="word">BONK!</div>
+<div class="reel" id="reel"><div class="strip" id="strip"></div><div class="mark"></div></div></div>
+<div class="bar"><button class="buy" id="buy">Open crate</button><span id="bodies"></span><span class="err" id="err"></span>
 <div class="reveal" id="rev"></div></div>
-<div class="card"><div class="chips" id="chips"></div><div class="grid" id="grid"></div></div></div>
+<div class="card0"><div class="chips" id="chips"></div><div class="grid" id="grid"></div></div>
 <p><a href="/#herd">See the herd</a></p></main>
 <script>
-const M = ${JSON.stringify(meta)};
+const M = ${JSON.stringify(meta).replace(/</g, "\\u003c")};
 const T = new URLSearchParams(location.hash.slice(1)).get("t");
+const ICON = { fleece: "🧶", horns: "🐏", shirt: "👕", head: "🧢", eyes: "🕶️", mouth: "😁", neck: "📿", hand: "🏈", feet: "👟", gear: "🛡️", tattoo: "💉", marks: "🩹", bg: "🏟️", finish: "✨", pose: "🙌", body: "💪" };
 const h = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-let S = null, filter = "all", v = Date.now();
 const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let S = null, filter = "all", busy = false;
+const ramSrc = (opt) => "/ram/" + S.uid + "/" + (opt ? opt + "-bare" : "bare") + "~" + Date.now() + ".svg";
 async function call(op, extra) {
   const r = await fetch("/api/locker", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ t: T, op, ...extra }) });
   const d = await r.json(); $("err").textContent = d.error || "";
-  if (d.uid) { S = d; v = Date.now(); draw(); }
+  if (d.uid) { S = d; if (op !== "crate") $("ram").firstChild.src = ramSrc(); draw(); }
   return d;
 }
 function draw() {
-  $("title").textContent = "🎒 " + (S.name || "Your") + "'s Locker";
-  $("sub").innerHTML = "<b>" + S.points + " RUTS</b> · " + S.crates + " crate" + (S.crates === 1 ? "" : "s") + " waiting · " + S.items.length + " items";
-  $("ram").src = "/ram/" + S.uid + ".svg?v=" + v;
-  $("bodies").innerHTML = Object.entries(M.bodies).map(([k, n]) => '<button data-b="' + k + '" class="' + ((S.look.body || "med") === k ? "on" : "") + '">' + n + "</button>").join("");
+  $("sub").innerHTML = h(S.name || "Your ram") + " · <b>" + S.points + " RUTS</b> · " + S.crates + " crate" + (S.crates === 1 ? "" : "s") + " waiting · " + S.items.length + " items";
+  $("bodies").innerHTML = Object.entries(M.bodies).map(([k, n]) => '<button data-b="' + k + '" class="' + ((S.look.body || "med") === k ? "on" : "") + '">' + n + "</button>").join(" ");
   const b = $("buy");
-  b.textContent = S.crates > 0 ? "📦 Open crate (" + S.crates + " waiting)" : "📦 Buy a crate · " + M.cost + " RUTS";
-  b.disabled = S.crates < 1 && S.points < M.cost;
+  if (!busy) { b.textContent = S.crates > 0 ? "📦 Open crate (" + S.crates + ")" : "📦 Buy crate · " + M.cost + " RUTS"; b.disabled = S.crates < 1 && S.points < M.cost; }
   const slots = [...new Set(S.items.map((i) => i.slot))];
   $("chips").innerHTML = ['<button data-f="all" class="' + (filter === "all" ? "on" : "") + '">All</button>'].concat(slots.map((sl) =>
-    '<button data-f="' + sl + '" class="' + (filter === sl ? "on" : "") + '">' + h(M.slots[sl] || sl) + "</button>")).join("");
+    '<button data-f="' + sl + '" class="' + (filter === sl ? "on" : "") + '">' + (ICON[sl] || "") + " " + h(M.slots[sl] || sl) + "</button>")).join("");
   const list = S.items.filter((i) => filter === "all" || i.slot === filter);
   $("grid").innerHTML = list.length ? list.map((i) => {
     const r = M.rarity[i.rarity] || { label: "Secret", color: "#5ee08f" }, on = S.look[i.slot] === i.id || (i.slot === "body" && S.look.body === i.id);
-    return '<button class="it' + (on ? " on" : "") + '" data-i="' + i.id + '" data-s="' + i.slot + '" style="border-left-color:' + r.color + '">' + h(i.name)
+    return '<button class="it' + (on ? " on" : "") + '" data-i="' + i.id + '" data-s="' + i.slot + '" style="border-left-color:' + r.color + '">' + (ICON[i.slot] || "") + " " + h(i.name)
       + '<small><span style="color:' + r.color + '">' + r.label + "</span> · " + h(M.slots[i.slot] || i.slot) + "</small></button>";
-  }).join("") : '<div class="empty">Nothing here yet. Open a crate!</div>';
+  }).join("") : '<div class="empty">Your locker is empty. Open a crate!</div>';
 }
-document.addEventListener("click", async (e) => {
-  const t = e.target.closest("button"); if (!t) return;
-  if (t.dataset.b) call("body", { type: t.dataset.b });
+function randomItem() {
+  const tiers = Object.entries(M.rarity); let x = Math.random() * tiers.reduce((s, [, v]) => s + v.weight, 0);
+  let tier = tiers[0][0]; for (const [k, v] of tiers) { if ((x -= v.weight) < 0) { tier = k; break; } }
+  const pool = M.items.filter((i) => i[3] === tier); return pool[Math.floor(Math.random() * pool.length)];
+}
+const cardHtml = (i, win) => { const r = M.rarity[i[3]] || { label: "Secret", color: "#5ee08f" };
+  return '<div class="card' + (win ? " win-target" : "") + '" style="border-bottom-color:' + r.color + '"><div class="e">' + (ICON[i[2]] || "🎁") + '</div><div class="n">' + h(i[1]) + '</div><div class="r" style="color:' + r.color + '">' + r.label + "</div></div>"; };
+async function unbox() {
+  if (busy) return; busy = true; $("rev").style.display = "none";
+  const btn = $("buy"); btn.disabled = true; btn.textContent = "Opening...";
+  const ramEl = $("ram"), crate = $("crate"), img = ramEl.firstChild;
+  const reqP = call("crate");
+  // 1. headbutt the crate
+  await ramEl.animate([{ left: "30%" }, { left: "20%" }], { duration: 380, easing: "ease-out", fill: "forwards" }).finished;
+  img.animate([{ transform: "rotate(0)" }, { transform: "rotate(14deg)" }], { duration: 200, fill: "forwards" });
+  await ramEl.animate([{ left: "20%" }, { left: "52%" }], { duration: 300, easing: "cubic-bezier(.5,0,1,1)", fill: "forwards" }).finished;
+  $("flash").animate([{ opacity: .8 }, { opacity: 0 }], { duration: 250 });
+  $("word").animate([{ opacity: 0, transform: "translateX(-50%) scale(.4)" }, { opacity: 1, transform: "translateX(-50%) scale(1.2)", offset: .3 }, { opacity: 0, transform: "translateX(-50%) scale(1)" }], { duration: 700 });
+  $("room").animate([{ transform: "translate(0)" }, { transform: "translate(-8px,4px)" }, { transform: "translate(7px,-4px)" }, { transform: "translate(0)" }], { duration: 240 });
+  crate.querySelector(".lid").animate([{ transform: "translate(0,0) rotate(0)" }, { transform: "translate(30px,-60px) rotate(-50deg)", opacity: 0 }], { duration: 600, fill: "forwards" });
+  crate.animate([{ transform: "translateX(-50%) scale(1)" }, { transform: "translateX(-50%) scale(1.15,.85)" }, { transform: "translateX(-50%) scale(1)" }], { duration: 300 });
+  ramEl.animate([{ left: "52%" }, { left: "30%" }], { duration: 450, easing: "ease-out", fill: "forwards" });
+  img.animate([{ transform: "rotate(14deg)" }, { transform: "rotate(0)" }], { duration: 300, fill: "forwards" });
+  const d = await reqP;
+  if (!d.reveal) { busy = false; crate.querySelector(".lid").getAnimations().forEach((a) => a.cancel()); draw(); return; }
+  // 2. spin the reel and land on the item the server rolled
+  const won = d.reveal.item, W = 138, N = 48, WIN = 42, reel = $("reel"), strip = $("strip");
+  const cards = Array.from({ length: N }, (_, k) => k === WIN ? [won.id, won.name, won.slot, won.rarity] : randomItem());
+  strip.innerHTML = cards.map((c, k) => cardHtml(c, k === WIN)).join("");
+  strip.style.transition = "none"; strip.style.transform = "translateX(0)"; reel.style.display = "block";
+  const target = WIN * W + 65 + (Math.random() - .5) * 90 - reel.clientWidth / 2;
+  await sleep(60);
+  strip.style.transition = "transform 5.2s cubic-bezier(.06,.7,.1,1)"; strip.style.transform = "translateX(" + (-target) + "px)";
+  await sleep(5400);
+  strip.children[WIN].classList.add("win");
+  await sleep(1100);
+  reel.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300 }).finished.then(() => { reel.style.display = "none"; });
+  // 3. the ram tries it on
+  img.src = ramSrc(won.id);
+  img.animate([{ transform: "translateY(0)" }, { transform: "translateY(-10%)" }, { transform: "translateY(0)" }], { duration: 450, iterations: 2 });
+  crate.querySelector(".lid").getAnimations().forEach((a) => a.cancel());
+  const r = M.rarity[won.rarity] || { label: "SECRET", color: "#5ee08f" }, rv = $("rev");
+  rv.style.display = "flex"; rv.style.borderLeftColor = r.color;
+  rv.innerHTML = "<div><small style=\\"color:" + r.color + "\\">" + r.label + " " + h(M.slots[won.slot] || won.slot) + "</small><b>" + h(won.name) + "</b>"
+    + (d.reveal.dupe ? "<div>Already had it: +" + d.reveal.refund + " RUTS</div>" : "") + "</div>"
+    + (d.reveal.dupe ? "" : '<button data-i="' + won.id + '" data-s="' + won.slot + '">Equip</button>');
+  busy = false; draw();
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button"); if (!t || busy) return;
+  if (t.id === "buy") unbox();
+  else if (t.dataset.b) call("body", { type: t.dataset.b });
   else if (t.dataset.f) { filter = t.dataset.f; draw(); }
   else if (t.dataset.i) t.classList.contains("on") ? call("unequip", { slot: t.dataset.s }) : call("equip", { item: t.dataset.i });
-  else if (t.id === "buy") {
-    t.disabled = true; t.textContent = "Opening...";
-    const d = await call("crate");
-    if (d.reveal) {
-      const i = d.reveal.item, r = M.rarity[i.rarity] || { label: "SECRET", color: "#5ee08f" }, rv = $("rev");
-      rv.style.display = "block";
-      rv.innerHTML = '<img src="/ram/' + S.uid + ".svg?try=" + i.id + "&v=" + Date.now() + '" alt=""><div class="tagr" style="color:' + r.color + '">' + r.label + " " + h(M.slots[i.slot] || i.slot)
-        + "</div><h2>" + h(i.name) + "</h2>" + (d.reveal.dupe ? "<div>Already had it: +" + d.reveal.refund + " RUTS back</div>" : '<button data-i="' + i.id + '" data-s="' + i.slot + '">Equip it</button>');
-    }
-    draw();
-  }
 });
-if (!T) $("sub").textContent = "Run /locker in Discord to get your private link."; else call("state");
+if (!T) $("sub").textContent = "Run /lockeroom in Discord to get your private link."; else call("state");
 </script></body></html>`;
 }
 
