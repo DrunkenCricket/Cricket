@@ -524,6 +524,13 @@ export class Game extends DurableObject {
     const u = this.one("SELECT * FROM users WHERE id=?", uid) || this.user(uid);
     return { name: u.name, points: u.points, crates: u.crates, opened: u.opened, look: JSON.parse(u.look), items: this.inventory(uid) };
   }
+  /** Open bets, plus anything settled in the last week, with who's in. */
+  bets() {
+    const rows = this.all("SELECT * FROM props WHERE status='open' OR created > ? ORDER BY (status='open') DESC, closes ASC LIMIT 40", Date.now() - 7 * 86400_000);
+    return rows.map((p) => ({ id: p.id, player: shown(p.player), stat: p.stat, label: STATS[p.stat]?.[2] || p.stat, line: p.line, game: p.game,
+      closes: p.closes, status: p.status, value: p.value,
+      users: this.all("SELECT e.user_id AS id, u.name FROM entries e LEFT JOIN users u ON u.id = e.user_id WHERE e.prop_id=? ORDER BY e.ts", p.id) }));
+  }
   herd() { return this.all("SELECT id, name, points FROM users"); }
   leaders() { return this.all("SELECT id, name, points FROM users ORDER BY points DESC LIMIT 10"); }
   inventory(uid) {

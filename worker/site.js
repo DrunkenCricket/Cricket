@@ -217,6 +217,14 @@ async function lockerApi(request, env) {
   return json({ uid, ...(await g.locker(uid)), ...extra }, 0);
 }
 
+async function betsData(env, ctx) {
+  if (!env.GAME) return { bets: [] };
+  const [bets, hist] = await Promise.all([env.GAME.get(env.GAME.idFromName("main")).bets(), historyData(env, ctx).catch(() => ({ standings: [] }))]);
+  const av = Object.fromEntries(hist.standings.map((p) => [p.id, p.avatar]));
+  for (const b of bets) for (const u of b.users) u.avatar = av[u.id] || avatarUrl(u.id, null);
+  return { bets };
+}
+
 export async function handleSite(request, env, ctx) {
   const { pathname } = new URL(request.url);
   if (pathname === "/api/locker" && request.method === "POST" && env.GAME) return lockerApi(request, env);
@@ -225,6 +233,7 @@ export async function handleSite(request, env, ctx) {
     if (pathname === "/api/week") return json(await weekData(env, ctx), 60);
     if (pathname === "/api/history") return json(await historyData(env, ctx), 120);
     if (pathname === "/api/herd") return json(await herdData(env, ctx), 60);
+    if (pathname === "/api/bets") return json(await betsData(env, ctx), 30);
   } catch (e) {
     return json({ error: String(e.message || e) }, 10);
   }
@@ -625,6 +634,9 @@ td.n{font-variant-numeric:tabular-nums}
 .who{display:flex;align-items:center;gap:10px}.who img{width:30px;height:30px;border-radius:50%}
 .pct{display:flex;align-items:center;gap:8px}.pct span{height:6px;background:var(--gold);border-radius:3px}
 .empty{color:var(--muted);padding:40px;text-align:center}
+.bt{font-size:20px;font-weight:700;margin:4px 0 6px}.bt b{color:var(--gold)}.bet .faces{justify-content:flex-start}
+.bet.hit{border-color:var(--good)}.bet.miss,.bet.cancelled{opacity:.6}.rhit{color:var(--good);font-weight:700}.rmiss{color:#ef4444;font-weight:700}
+h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacing:1px;margin:26px 0 10px}
 .pasture{height:560px}
 ${FIELD_CSS}
 .rw{position:absolute;width:150px;margin-left:-75px;margin-top:-150px;text-align:center;cursor:pointer;text-decoration:none;color:#fff}
@@ -643,14 +655,14 @@ ${FIELD_CSS}
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="herd">Herd</button><a class="navlink" href="/lockeroom">Lockeroom</a></nav>
+<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets</button><button data-t="herd">Herd</button><a class="navlink" href="/lockeroom">Lockeroom</a></nav>
 </div></header>
 <template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const view = document.getElementById("view"), sub = document.getElementById("sub");
-let week = null, hist = null, herd = null, tab = "week", raf = 0;
+let week = null, hist = null, herd = null, bets = null, tab = "week", raf = 0;
 const when = (iso) => new Date(iso).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"});
 
 function faces(users) {
@@ -763,11 +775,32 @@ function pasture() {
   raf = requestAnimationFrame(step);
 }
 
+// Bets: every open prop bet, who's in, and how the last week's bets went.
+function betsView() {
+  if (!bets) { view.innerHTML = '<div class="empty">Loading bets...</div>'; return; }
+  const open = bets.filter((b) => b.status === "open");
+  sub.textContent = open.length + " open bet" + (open.length === 1 ? "" : "s") + " · 20 RUTS to enter, a hit wins a crate";
+  if (!bets.length) { view.innerHTML = '<div class="empty">No bets yet. Mods post them in Discord with /prop.</div>'; return; }
+  const left = (t) => { const m = Math.round((t - Date.now()) / 60000); return m <= 0 ? "closed" : m < 60 ? m + "m left" : m < 1440 ? Math.round(m / 60) + "h left" : Math.round(m / 1440) + "d left"; };
+  const card = (b) => {
+    const st = b.status === "open" ? (b.closes > Date.now() ? '<span class="lock">Closes ' + when(new Date(b.closes)) + " · " + left(b.closes) + "</span>" : "Live · entries closed")
+      : b.status === "hit" ? '<span class="rhit">HIT · ' + b.value + " " + esc(b.label) + "</span>" : b.status === "miss" ? '<span class="rmiss">Missed · ' + b.value + "</span>" : "Cancelled";
+    return '<div class="game bet ' + b.status + '"><div class="meta"><span>Bet #' + b.id + " · " + esc(b.game) + "</span><span>" + st + "</span></div>"
+      + '<div class="bt">' + esc(b.player) + " gets <b>" + b.line + "+</b> " + esc(b.label) + "</div>"
+      + '<div class="count">' + b.users.length + " in" + (b.status === "hit" && b.users.length ? " · each won a crate" : "") + "</div>"
+      + (b.users.length ? faces(b.users) : "") + "</div>";
+  };
+  const done = bets.filter((b) => b.status !== "open");
+  view.innerHTML = (open.length ? '<p class="note">Take a bet with its button in Discord. Results settle live from the box score.</p><div class="grid">' + open.map(card).join("") + "</div>" : '<div class="empty">No open bets right now.</div>')
+    + (done.length ? '<h3 class="past">Last 7 days</h3><div class="grid">' + done.map(card).join("") + "</div>" : "");
+}
+
 function render() {
   cancelAnimationFrame(raf);
   if (tab !== "herd" && sock) { try { sock.close(); } catch {} sock = null; }
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
   if (tab === "herd") { pasture(); return; }
+  if (tab === "bets") { betsView(); return; }
   if (tab === "week") {
     if (!week) return;
     if (week.error) { view.innerHTML = '<div class="empty">Couldn\\'t load this week: ' + esc(week.error) + '</div>'; return; }
@@ -792,10 +825,11 @@ function render() {
   }
 }
 document.querySelectorAll("nav button").forEach((b) => b.onclick = () => { tab = b.dataset.t; history.replaceState(null, "", "#" + tab); render(); });
-if (["week", "last", "table", "herd"].includes(location.hash.slice(1))) tab = location.hash.slice(1);
+if (["week", "last", "table", "herd", "bets"].includes(location.hash.slice(1))) tab = location.hash.slice(1);
 fetch("/api/week").then((r) => r.json()).then((d) => { week = d; if (tab === "week") render(); }).catch((e) => { week = {error: e.message}; render(); });
 render();
 fetch("/api/history").then((r) => r.json()).then((d) => { hist = d; if (tab === "last" || tab === "table") render(); }).catch(() => {});
+fetch("/api/bets").then((r) => r.json()).then((d) => { bets = d.bets; if (tab === "bets") render(); }).catch(() => { bets = []; });
 fetch("/api/herd").then((r) => r.json()).then((d) => { herd = d; if (tab === "herd") render(); }).catch(() => { herd = { rams: [] }; });
 </script>
 </body>
