@@ -104,10 +104,16 @@ export async function gameCommand(i, env, ctx) {
       // Discord hides this command from non-mods; double-check here too (Administrator, Manage Server or Timeout Members).
       const perms = BigInt(i.member?.permissions || 0);
       if (!(perms & 8n) && !(perms & 32n) && !(perms & (1n << 40n))) return err("Only mods can give RUTS.");
-      const to = opt(i, "user"), amount = opt(i, "amount"), reason = opt(i, "reason");
-      const u = i.data.resolved?.users?.[to];
+      const sub = i.data.options[0], o = Object.fromEntries((sub.options || []).map((x) => [x.name, x.value]));
+      const reason = o.reason, note = reason ? `${reason} (from ${name})` : `From ${name}`;
+      if (sub.name === "everyone") {
+        const n = await g.giveAll(o.amount, note);
+        const verb = o.amount >= 0 ? `gave **everyone ${o.amount} RUTS**` : `took **${-o.amount} RUTS** from everyone`;
+        return { type: 4, data: { content: `🎁 <@${uid}> ${verb}${reason ? `: ${reason}` : ""}. ${n} rams got it.`, allowed_mentions: { parse: [] } } };
+      }
+      const to = o.user, u = i.data.resolved?.users?.[to];
       if (u?.bot) return err("Bots don't have rams.");
-      const r = await g.give(to, u ? nameOf(u) : undefined, amount, reason ? `${reason} (from ${name})` : `From ${name}`);
+      const r = await g.give(to, u ? nameOf(u) : undefined, o.amount, note);
       const verb = r.delta >= 0 ? `gave <@${to}> **${r.delta} RUTS**` : `took **${-r.delta} RUTS** from <@${to}>`;
       return { type: 4, data: { content: `🎁 <@${uid}> ${verb}${reason ? `: ${reason}` : ""}. They have **${r.points}** now.`, allowed_mentions: { users: [to] } } };
     }

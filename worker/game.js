@@ -528,6 +528,22 @@ export class Game extends DurableObject {
     this.pay(`give:${crypto.randomUUID()}`, uid, delta, reason || (delta >= 0 ? "Gift from a mod" : "Fined by a mod"));
     return { delta, points: u.points + delta };
   }
+  /** Mod gift to everyone: every ram owner and everyone who has ever made a pick. */
+  async giveAll(amount, reason) {
+    const res = await fetch(CSV_URL, { cf: { cacheTtl: 60 } });
+    if (res.ok) {
+      const [head, ...rows] = (await res.text()).trim().split(/\r?\n/).map(splitCSV);
+      const iu = head.indexOf("user_id"), inm = head.indexOf("user_name");
+      for (const r of rows) if (r[iu]) this.user(r[iu], r[inm]);
+    }
+    const tag = crypto.randomUUID();
+    let n = 0;
+    for (const u of this.all("SELECT id, points FROM users")) {
+      const delta = Math.max(-u.points, Math.trunc(amount));
+      if (delta && this.pay(`giveall:${tag}:${u.id}`, u.id, delta, reason)) n++;
+    }
+    return n;
+  }
   setPropsChannel(ch) { this.meta("propsChannel", ch); }
   async saveMessage(propId, channelId, messageId) {
     this.sql.exec("UPDATE props SET channel_id=?, message_id=? WHERE id=? AND message_id IS NULL", channelId, messageId, propId);
