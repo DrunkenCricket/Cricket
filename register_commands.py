@@ -44,7 +44,7 @@ COMMANDS = [
     {"name": "unequip", "description": "Take an item off your ram", "type": 1, "contexts": [0],
      "options": [{"type": 3, "name": "slot", "description": "Which slot", "required": True, "choices": [
          {"name": n, "value": v} for v, n in [("pose", "Pose"), ("bg", "Background"), ("fleece", "Fleece"), ("horns", "Horns"),
-         ("shirt", "Shirt"), ("head", "Head"), ("eyes", "Eyes"), ("nose", "Nose"), ("mouth", "Mouth"), ("neck", "Neck"), ("hand", "Hand"),
+         ("shirt", "Shirt"), ("head", "Head"), ("eyes", "Eyes"), ("nose", "Nose"), ("mouth", "Mouth"), ("neck", "Neck"), ("arms", "Arms"), ("hand", "Hand"),
          ("feet", "Feet"), ("gear", "Gear"), ("tattoo", "Tattoo"), ("marks", "Marks"), ("finish", "Finish")]]}]},
     {"name": "body", "description": "Pick your ram's body type", "type": 1, "contexts": [0],
      "options": [{"type": 3, "name": "type", "description": "Body type", "required": True, "choices": [

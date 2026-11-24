@@ -523,6 +523,21 @@ const NOSES = [
 ];
 for (const [k, n, r, svg] of NOSES) item(`nose_${k}`, n, "nose", r, { svg });
 
+// ---------- ARMS: worn around both upper arms; art(armWidth, side) draws one, centered at 0,0 along the arm ----------
+const band = (c, h = 12) => (w) => `<rect x="${-(w / 2 + 3)}" y="${-h / 2}" width="${w + 6}" height="${h}" rx="4" fill="${c}" stroke="${OUT}" stroke-width="4"/>`;
+const ARMS = [
+  ["flamingo_floaties", "Flamingo Arm Floaties", "epic", (w, side) => `<g transform="scale(1.45)"><ellipse rx="${w / 2.9 + 12}" ry="12" fill="#ff7fb0" stroke="${OUT}" stroke-width="4"/>
+    <ellipse rx="${w / 2.9 - 1}" ry="4" fill="#d94a8c"/><ellipse cx="${-w / 6}" cy="5" rx="${w / 7}" ry="2.5" fill="#fff" opacity=".5"/>
+    <g transform="translate(${side * (w / 2.9 + 6)} -6) scale(${side} 1)"><path d="M 0 0 C 10 -12, 0 -22, 8 -30" fill="none" stroke="${OUT}" stroke-width="9" stroke-linecap="round"/>
+    <path d="M 0 0 C 10 -12, 0 -22, 8 -30" fill="none" stroke="#ff7fb0" stroke-width="5" stroke-linecap="round"/><circle cx="9" cy="-32" r="6" fill="#ff7fb0" stroke="${OUT}" stroke-width="3"/>
+    <path d="M 14 -34 L 22 -28 L 14 -27 Z" fill="#2b2b33"/></g></g>`],
+  ["floaties_orange", "Classic Arm Floaties", "rare", (w) => `<ellipse rx="${w / 2 + 13}" ry="12" fill="#ff9a3c" stroke="${OUT}" stroke-width="5"/><ellipse rx="${w / 2 - 1}" ry="5" fill="#d8731f"/>`],
+  ["bands_gold", "Gold Armbands", "rare", band("#ffc82c")],
+  ["bands_blue", "Blue Armbands", "common", band("#1f55d6")],
+  ["captain", "Captain's Armband", "epic", (w) => band("#ffc82c", 16)(w) + `<path d="M 4 -4.5 A 5.5 5.5 0 1 0 4 4.5" stroke="${OUT}" stroke-width="3" fill="none" stroke-linecap="round"/>`],
+];
+for (const [k, n, r, art] of ARMS) item(`arms_${k}`, n, "arms", r, { art });
+
 // ---------- POSES: arm angles in degrees at the shoulder (L positive = up and out, R mirrored), plus sway ----------
 export const POSES = {
   idle: { L: 0, R: 0, s: 6 },
@@ -546,9 +561,9 @@ item("finish_uncanny", "Uncanny Finish", "finish", "secret");   // never listed 
 
 for (const id of Object.values(DEFAULT_LOOK)) ITEMS[id].starter = true;
 
-export const SLOTS = ["base", "pose", "bg","fleece", "horns", "shirt", "head", "eyes", "nose", "mouth", "neck", "hand", "feet", "gear", "tattoo", "marks", "finish"];
+export const SLOTS = ["base", "pose", "bg","fleece", "horns", "shirt", "head", "eyes", "nose", "mouth", "neck", "arms", "hand", "feet", "gear", "tattoo", "marks", "finish"];
 export const SLOT_NAMES = { base: "Base", pose: "Pose", bg: "Background", fleece: "Fleece", horns: "Horns", shirt: "Shirt", head: "Head", eyes: "Eyes", nose: "Nose", mouth: "Mouth",
-  neck: "Neck", hand: "Hand", feet: "Feet", gear: "Gear", tattoo: "Tattoo", marks: "Marks", finish: "Finish" };
+  neck: "Neck", arms: "Arms", hand: "Hand", feet: "Feet", gear: "Gear", tattoo: "Tattoo", marks: "Marks", finish: "Finish" };
 
 // ---------- render ----------
 const HEAD_T = "translate(256,186) scale(.78) translate(-256,-250)";
@@ -698,7 +713,15 @@ export function renderRam(look = {}, size = 512, t = null) {
   const onHand = (side) => handGear ? gear.fn({ ...body, handL: side === "L" ? body.handL : [-999, -999], handR: side === "R" ? body.handR : [-999, -999] }) : "";
   const [hL, hR] = hands;
   const held = I("hand") ? `<g transform="translate(${body.handR[0]},${body.handR[1]})">${I("hand").svg}</g>` : "";
-  const armL = `${armBase(body.armL)}${sleeve(body.armL, body.upperL)}`, armR = `${armBase(body.armR)}${sleeve(body.armR, body.upperR)}`;
+  // arm slot (floaties etc.) rides on the upper arm, so it follows poses
+  const armItem = I("arms");
+  const onArm = (upper, side) => {
+    if (!armItem) return "";
+    const n = upper.match(/-?[\d.]+/g).map(Number), [x0, y0] = n.slice(0, 2), [x1, y1] = n.slice(-2);
+    const x = (x0 + x1) / 2, y = (y0 + y1) / 2, ang = Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI;
+    return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(ang - 90).toFixed(1)})">${armItem.art(body.arm, side)}</g>`;
+  };
+  const armL = `${armBase(body.armL)}${sleeve(body.armL, body.upperL)}${onArm(body.upperL, -1)}`, armR = `${armBase(body.armR)}${sleeve(body.armR, body.upperR)}${onArm(body.upperR, 1)}`;
   // raised arms go in front of the head and horns so they read
   const upper = `${body.upL ? `<g ${gArmL}>${armL}${hL}${onHand("L")}</g>` : ""}${body.upR ? `<g ${gArmR}>${armR}${hR}${onHand("R")}${held}</g>` : ""}`;
   let ram = `${gear?.behind || ""}${neck?.behind ? `<g transform="translate(256 0) scale(${bodyW(body).toFixed(3)} 1) translate(-256 0)">${neck.behind}</g>` : ""}
