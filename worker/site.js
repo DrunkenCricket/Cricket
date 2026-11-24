@@ -379,7 +379,7 @@ try {
   if (T && Number(T.split(".")[1]) * 1000 < Date.now()) { localStorage.removeItem("lr_t"); T = null; }
 } catch {}
 if (T && !location.hash) history.replaceState(null, "", "#t=" + T);
-const ICON = { fleece: "🧶", horns: "🐏", shirt: "👕", head: "🧢", eyes: "🕶️", mouth: "😁", neck: "📿", hand: "🏈", feet: "👟", gear: "🛡️", tattoo: "💉", marks: "🩹", bg: "🏟️", finish: "✨", pose: "🙌", body: "💪" };
+const ICON = { fleece: "🧶", horns: "🐏", shirt: "👕", head: "🧢", eyes: "🕶️", nose: "💍", mouth: "😁", neck: "📿", hand: "🏈", feet: "👟", gear: "🛡️", tattoo: "💉", marks: "🩹", bg: "🏟️", finish: "✨", pose: "🙌", body: "💪" };
 const h = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const $ = (id) => document.getElementById(id);
 const SLOT = Object.assign({}, M.slots, { neck: "Neck & Scarves", head: "Hats", hand: "In Hand", feet: "Shoes", bg: "Background", body: "Body" });

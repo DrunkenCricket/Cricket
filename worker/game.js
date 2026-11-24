@@ -291,7 +291,9 @@ export class Game extends DurableObject {
 
   // ---------- crates ----------
   roll(uid, u) {
-    if (u.opened === 0) return { id: FIRST_CRATE[0], guaranteed: true };
+    const owned = this.owned(uid);
+    const next = FIRST_CRATE.find((id) => !owned.has(id));   // girl ram first, then the nose ring, for everyone
+    if (next) return { id: next, guaranteed: true };
     if (rand(UNCANNY_ODDS) === 0) return { id: "finish_uncanny" };
     const tiers = Object.entries(RARITY).filter(([k]) => POOL[k]?.length);
     let r = rand(tiers.reduce((s, [, v]) => s + v.weight, 0));

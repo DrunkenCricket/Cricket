@@ -199,7 +199,7 @@ function crateReply(r, uid) {
   const it = r.item;
   const lines = [
     `<@${uid}> ${r.bought ? `bought a crate (${CRATE_COST} RUTS) and pulled:` : "opened a crate and pulled:"}`,
-    r.guaranteed ? "*First crate: a brand-new look.*" : "",
+    r.guaranteed ? (it.slot === "base" ? "*First crate: a brand-new look.*" : "*Guaranteed drop!*") : "",
     `# ${it.name}`,
     `**${rarityName(it)}** ${SLOT_NAMES[it.slot] || it.slot}`,
     r.dupe ? `Already had it, so they got **+${r.refund} RUTS** back.` : "",

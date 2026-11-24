@@ -84,7 +84,8 @@ export const FACES = { tan: "#d9b98a", brown: "#a87a4f", dark: "#3d3330", gray: 
 // (the backend hands out FIRST_CRATE instead of a random roll on crate #1).
 item("base_boy", "Boy Ram", "base", "common", { starter: true });
 item("base_girl", "Girl Ram", "base", "rare");
-export const FIRST_CRATE = ["base_girl"];
+// Guaranteed pulls, in order: a player's next crate gives the first one here they don't own yet.
+export const FIRST_CRATE = ["base_girl", "nose_ring_gold"];
 // What every ram starts in. These are free for everyone and never come out of a crate.
 export const DEFAULT_LOOK = { base: "base_boy", fleece: "fleece_cream", horns: "horns_curl" };
 
@@ -192,6 +193,8 @@ const SHIRT_DESIGNS = [
   ["flamingo", "Flamingo Shirt", "rare",{ fill: "#7fd6c9", collar: "#5fb8ab", pattern: flamingos }],
   ["referee", "Referee Stripes", "rare", { fill: "#fff", collar: "#111", pattern: vstripes("#111", 14), sleeve: "#111" }],
   ["camo", "Camo Tee", "epic", { fill: "#6b7d4a", collar: "#3f4d2a", pattern: `<rect width="512" height="512" fill="url(#fp_camo)"/>`, defs: FLEECE_PATTERNS[3][3] }],
+  ["rainbow", "Rainbow Shirt", "epic", { fill: "#ff4d4d", collar: "#fff", sleeve: "#4d9bff",
+    pattern: ["#ff4d4d", "#ff9a3c", "#ffe94d", "#5ee08f", "#4d9bff", "#a66bff"].map((c, i) => `<rect x="100" y="${296 + i * 28}" width="312" height="28" fill="${c}"/>`).join("") }],
   ["goat", "GOAT Tee", "legendary", { fill: "#111", collar: GOLD, deco: (b) => txt("GOAT", b.chest[0], b.chest[1] + 18, 40, GOLD) + `<circle cx="${b.chest[0] + 46}" cy="${b.chest[1] - 22}" r="8" fill="#fff"/>` }],
 ];
 // Every design comes in tank, short sleeve and long sleeve.
@@ -234,6 +237,11 @@ const HEADS = [
   ["crown", "Crown", "legendary", `<path d="M 194 160 L 182 92 L 222 124 L 256 78 L 290 124 L 330 92 L 318 160 Z" fill="#ffc82c" ${S}/><rect x="190" y="150" width="132" height="22" rx="6" fill="#e0a800" ${S}/><circle cx="256" cy="130" r="9" fill="#e5484d" ${S6}/>`],
   ["tiara", "Tiara", "epic", `<path d="M 200 160 L 216 132 L 236 150 L 256 118 L 276 150 L 296 132 L 312 160 Z" fill="#e6f0ff" ${S6}/><circle cx="256" cy="134" r="7" fill="#ff5ec4"/>`],
   ["flowers", "Flower Crown", "rare", [200, 228, 256, 284, 312].map((x, i) => `<circle cx="${x}" cy="${162 - (i % 2) * 8}" r="13" fill="${["#ff6fae", "#ffd84a", "#7fd0ff", "#ff6fae", "#ffd84a"][i]}" ${S6}/><circle cx="${x}" cy="${162 - (i % 2) * 8}" r="4" fill="#fff"/>`).join("")],
+  ["flamingo", "Flamingo Hat", "rare", `<ellipse cx="256" cy="146" rx="62" ry="22" fill="#ff7fb0" stroke="#15172b" stroke-width="9"/>
+    <path d="M 296 140 C 330 120, 300 80, 280 70 C 258 58, 262 30, 286 30 C 304 30, 312 44, 306 54" fill="none" stroke="#15172b" stroke-width="19" stroke-linecap="round"/>
+    <path d="M 296 140 C 330 120, 300 80, 280 70 C 258 58, 262 30, 286 30 C 304 30, 312 44, 306 54" fill="none" stroke="#ff7fb0" stroke-width="10" stroke-linecap="round"/>
+    <path d="M 304 50 L 322 66 L 312 70 Z" fill="#2b2b33" stroke="#15172b" stroke-width="3"/><path d="M 304 50 L 316 60 L 308 62 Z" fill="#fff"/><circle cx="290" cy="38" r="3.5" fill="#15172b"/>
+    <path d="M 214 140 C 200 128, 196 112, 212 108" fill="none" stroke="#ff9ccf" stroke-width="7" stroke-linecap="round"/>`],
   ["halo", "Halo", "legendary", `<ellipse cx="256" cy="76" rx="70" ry="16" fill="none" stroke="#fff3b0" stroke-width="12"/><ellipse cx="256" cy="76" rx="70" ry="16" fill="none" stroke="#ffd84a" stroke-width="5"/>`],
   ["durag", "Durag", "rare", `<path d="M 182 170 C 180 100, 332 100, 330 170 C 300 160, 212 160, 182 170 Z" fill="${BLUE}" ${S}/><path d="M 320 160 C 350 190, 360 240, 344 280" stroke="${BLUE}" stroke-width="16" fill="none" stroke-linecap="round"/>`],
   ["headset", "Coach Headset", "epic", `<path d="M 176 210 C 176 100, 336 100, 336 210" fill="none" stroke="#222" stroke-width="12"/><rect x="160" y="196" width="28" height="44" rx="10" fill="#222" ${S6}/><rect x="324" y="196" width="28" height="44" rx="10" fill="#222" ${S6}/><path d="M 174 236 C 180 300, 220 330, 240 330" stroke="#222" stroke-width="6" fill="none"/><circle cx="244" cy="330" r="8" fill="#222"/>`],
@@ -276,6 +284,9 @@ const MOUTHS = [
   ["lollipop", "Lollipop", "rare", `<path d="M 270 344 L 316 372" stroke="#fff" stroke-width="5"/><circle cx="322" cy="378" r="16" fill="#ff5ec4" ${S6}/><path d="M 314 372 q 8 6 16 0" stroke="#fff" stroke-width="3" fill="none"/>`],
   ["gum", "Bubble Gum", "rare", `<circle cx="256" cy="352" r="26" fill="#ff9ccf" ${S6}/><circle cx="248" cy="344" r="6" fill="#fff" opacity=".7"/>`],
   ["whistle_mouth", "Whistle", "rare", `<rect x="244" y="338" width="34" height="18" rx="6" fill="#cfd6e0" ${S6}/><circle cx="276" cy="347" r="9" fill="#cfd6e0" ${S6}/>`],
+  ["lips", "Giant Red Lips", "rare", `<path d="M 206 336 C 222 314, 244 318, 256 328 C 268 318, 290 314, 306 336 C 290 368, 222 368, 206 336 Z" fill="#e11d2e" stroke="#15172b" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M 210 336 C 236 344, 276 344, 302 336" stroke="#8a0f1a" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M 226 328 q 10 -6 20 -2" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".7"/>`],
   ["toothpick", "Toothpick", "common", `<path d="M 270 342 L 310 330" stroke="#e6c98f" stroke-width="5" stroke-linecap="round"/>`],
 ];
 for (const [k, n, r, svg, defs] of MOUTHS) item(`mouth_${k}`, n, "mouth", r, { svg, defs });
@@ -376,6 +387,7 @@ const FEET = [
   ["rocket", "Rocket Boots", "legendary", `<path d="M -22 470 L -22 432 L 14 432 L 14 470 Z" fill="#9aa3b2" ${S}/><path d="M -16 470 L -4 500 L 8 470 Z" fill="#ff6a1a"/>`],
   ["gold_hooves", "Gold-Plated Hooves", "mythic", `<path d="M -22 472 q 22 -18 44 0 l 0 12 l -44 0 Z" fill="#ffc82c" ${S}/><path d="M -12 466 l 8 0" stroke="#fff" stroke-width="4"/>`],
   ["boots_work", "Work Boots", "common", `<path d="M -22 484 L -22 440 L 14 440 L 16 462 C 30 466, 36 474, 36 484 Z" fill="#a8703f" ${S}/><path d="M -22 478 L 36 478" stroke="#3a2412" stroke-width="7"/>`],
+  ["flamingo_legs", "Flamingo Legs", "legendary", `<path d="M -4 476 L -22 486 M 2 476 L 2 488 M 8 476 L 24 486" stroke="#15172b" stroke-width="9" stroke-linecap="round"/><path d="M -4 476 L -22 486 M 2 476 L 2 488 M 8 476 L 24 486" stroke="#ff7fb0" stroke-width="4" stroke-linecap="round"/>`],
   ["crocs", "Foam Clogs", "rare", `<path d="M -26 484 C -26 460, 16 456, 34 476 L 34 484 Z" fill="#5ee08f" ${S}/>${[-14, -2, 10].map((x) => `<circle cx="${x}" cy="470" r="3" fill="${OUT}"/>`).join("")}`],
 ];
 for (const [k, n, r, svg] of FEET) item(`feet_${k}`, n, "feet", r, { svg });
@@ -410,6 +422,17 @@ const GEAR = [
   ["aura_blue", "Royal Aura", "epic", { behind: `<circle cx="256" cy="280" r="220" fill="#5b8cff" opacity=".2"/>` }],
   ["spotlight", "Spotlight", "rare", { behind: `<path d="M 200 0 L 312 0 L 420 512 L 92 512 Z" fill="#fff" opacity=".12"/>` }],
   ["confetti_fx", "Confetti Burst", "rare", { front: Array.from({ length: 30 }, (_, i) => `<rect x="${(i * 67) % 500}" y="${(i * 41) % 300}" width="10" height="5" fill="${[GOLD, BLUE, "#ff5ec4", "#5ee08f"][i % 4]}" transform="rotate(${i * 37} ${(i * 67) % 500} ${(i * 41) % 300})"/>`).join("") }],
+  ["floaty", "Flamingo Floaty", "epic", { fn: (b) => {
+    const y = b.belt - 18, rx = (b.handR[0] - b.handL[0]) / 2 - 4, cx = 256;
+    return `<ellipse cx="${cx}" cy="${y}" rx="${rx}" ry="22" fill="none" stroke="#15172b" stroke-width="40"/>
+      <ellipse cx="${cx}" cy="${y}" rx="${rx}" ry="22" fill="none" stroke="#ff7fb0" stroke-width="30"/>
+      <ellipse cx="${cx - rx * 0.4}" cy="${y + 12}" rx="${rx * 0.25}" ry="5" fill="#fff" opacity=".45"/>
+      <path d="M ${cx + rx - 4} ${y - 6} C ${cx + rx + 30} ${y - 60}, ${cx + rx - 10} ${y - 110}, ${cx + rx + 14} ${y - 132}" fill="none" stroke="#15172b" stroke-width="22" stroke-linecap="round"/>
+      <path d="M ${cx + rx - 4} ${y - 6} C ${cx + rx + 30} ${y - 60}, ${cx + rx - 10} ${y - 110}, ${cx + rx + 14} ${y - 132}" fill="none" stroke="#ff7fb0" stroke-width="13" stroke-linecap="round"/>
+      <circle cx="${cx + rx + 18}" cy="${y - 136}" r="15" fill="#ff7fb0" stroke="#15172b" stroke-width="6"/>
+      <path d="M ${cx + rx + 30} ${y - 140} L ${cx + rx + 50} ${y - 124} L ${cx + rx + 34} ${y - 122} Z" fill="#2b2b33" stroke="#15172b" stroke-width="3"/>
+      <circle cx="${cx + rx + 21}" cy="${y - 140}" r="3.5" fill="#15172b"/>`;
+  } }],
   ["sweat", "Game-Day Sweat", "common", { front: `<path d="M 340 170 q 8 14 0 22 q -8 -8 0 -22 Z M 180 200 q 6 10 0 16 q -6 -6 0 -16 Z" fill="#7fd0ff" ${S6}/>` }],
 ];
 for (const [k, n, r, art] of GEAR) item(`gear_${k}`, n, "gear", r, art);
@@ -484,6 +507,22 @@ const BGS = [
 ];
 for (const [k, n, r, svg] of BGS) item(`bg_${k}`, n, "bg", r, { svg });
 
+// ---------- NOSE: rings through the snout (head space; nostrils sit at 238/274, 312) ----------
+const ring = (c, r = 11, w = 5, gem = "") => `<path d="M ${256 - r * 0.62} 314 A ${r} ${r} 0 1 0 ${256 + r * 0.62} 314" fill="none" stroke="${OUT}" stroke-width="${w + 5}" stroke-linecap="round"/>
+  <path d="M ${256 - r * 0.62} 314 A ${r} ${r} 0 1 0 ${256 + r * 0.62} 314" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>
+  <path d="M ${256 - r * 0.5} ${318 + r * 0.6} q ${r * 0.4} ${r * 0.35} ${r * 0.8} 0" stroke="#fff" stroke-width="2" fill="none" opacity=".6"/>${gem}`;
+const NOSES = [
+  ["ring_gold", "Gold Nose Ring", "rare", ring("#ffc82c")],
+  ["ring_silver", "Silver Nose Ring", "common", ring("#cfd6e0")],
+  ["ring_black", "Black Nose Ring", "common", ring("#2b2b33")],
+  ["ring_blue", "Royal Blue Nose Ring", "rare", ring("#1f55d6")],
+  ["ring_diamond", "Diamond Nose Ring", "epic", ring("#e6f0ff", 11, 5, `<path d="M 256 ${314 + 22} l 6 -6 l -6 -6 l -6 6 Z" fill="#bfefff" stroke="${OUT}" stroke-width="3"/>`)],
+  ["bull", "Big Bull Ring", "legendary", ring("#ffc82c", 19, 7)],
+  ["stud_l", "Nose Stud", "common", `<circle cx="226" cy="306" r="4.5" fill="#cfd6e0" stroke="${OUT}" stroke-width="2.5"/>`],
+  ["stud_gold", "Gold Nose Studs", "rare", `<circle cx="226" cy="306" r="4.5" fill="#ffc82c" stroke="${OUT}" stroke-width="2.5"/><circle cx="286" cy="306" r="4.5" fill="#ffc82c" stroke="${OUT}" stroke-width="2.5"/>`],
+];
+for (const [k, n, r, svg] of NOSES) item(`nose_${k}`, n, "nose", r, { svg });
+
 // ---------- POSES: arm angles in degrees at the shoulder (L positive = up and out, R mirrored), plus sway ----------
 export const POSES = {
   idle: { L: 0, R: 0, s: 6 },
@@ -507,8 +546,8 @@ item("finish_uncanny", "Uncanny Finish", "finish", "secret");   // never listed 
 
 for (const id of Object.values(DEFAULT_LOOK)) ITEMS[id].starter = true;
 
-export const SLOTS = ["base", "pose", "bg","fleece", "horns", "shirt", "head", "eyes", "mouth", "neck", "hand", "feet", "gear", "tattoo", "marks", "finish"];
-export const SLOT_NAMES = { base: "Base", pose: "Pose", bg: "Background", fleece: "Fleece", horns: "Horns", shirt: "Shirt", head: "Head", eyes: "Eyes", mouth: "Mouth",
+export const SLOTS = ["base", "pose", "bg","fleece", "horns", "shirt", "head", "eyes", "nose", "mouth", "neck", "hand", "feet", "gear", "tattoo", "marks", "finish"];
+export const SLOT_NAMES = { base: "Base", pose: "Pose", bg: "Background", fleece: "Fleece", horns: "Horns", shirt: "Shirt", head: "Head", eyes: "Eyes", nose: "Nose", mouth: "Mouth",
   neck: "Neck", hand: "Hand", feet: "Feet", gear: "Gear", tattoo: "Tattoo", marks: "Marks", finish: "Finish" };
 
 // ---------- render ----------
@@ -585,7 +624,12 @@ export function renderRam(look = {}, size = 512, t = null) {
   if (fleeceItem.defs) defs.add(fleeceItem.defs);
 
   const gear = I("gear"), neck = I("neck");
-  const legs = [lx, rx].map((x) => `<path d="M ${x} ${body.hip - 6} L ${x} 466" stroke="${OUT}" stroke-width="40" stroke-linecap="round"/>
+  const flamingoLegs = look.feet === "feet_flamingo_legs";
+  const legs = flamingoLegs   // skinny pink stilts with a backward knee
+    ? [lx, rx].map((x) => { const d = `M ${x} ${body.hip - 6} L ${x + 4} 446 L ${x - 6} 460 L ${x + 2} 476`;
+        return `<path d="${d}" fill="none" stroke="${OUT}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="#ff7fb0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="${x + 4}" cy="446" r="7" fill="#ff7fb0" stroke="${OUT}" stroke-width="4"/>`; }).join("")
+    : [lx, rx].map((x) => `<path d="M ${x} ${body.hip - 6} L ${x} 466" stroke="${OUT}" stroke-width="40" stroke-linecap="round"/>
     <path d="M ${x} ${body.hip - 6} L ${x} 462" stroke="${fleece}" stroke-width="26" stroke-linecap="round"/>`).join("");
   const shoe = I("feet")?.svg || `<path d="M -22 472 q 22 -18 44 0 l 0 12 l -44 0 Z" fill="#3a2a1a" ${S}/>`;
   const feet = [lx, rx].map((x) => `<g transform="translate(${x},0)">${shoe}</g>`).join("");
@@ -643,7 +687,7 @@ export function renderRam(look = {}, size = 512, t = null) {
     <ellipse cx="238" cy="312" rx="8" ry="6" fill="${OUT}"/><ellipse cx="274" cy="312" rx="8" ry="6" fill="${OUT}"/>
     ${uncanny ? "" : `<path d="M 234 342 Q 258 358 282 336" fill="none" stroke="${OUT}" stroke-width="7" stroke-linecap="round"/>`}
     ${marks?.face ? marks.fn(body) : ""}
-    ${I("mouth")?.svg || ""}${I("eyes")?.svg || ""}
+    ${I("mouth")?.svg || ""}${I("nose")?.svg || ""}${I("eyes")?.svg || ""}
     ${hornLayer(I("horns") || ITEMS.horns_curl)}
     ${TUFT.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r + 5}" fill="${OUT}"/>`).join("")}${TUFT.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${fleece}"/>`).join("")}
     ${I("head")?.svg || ""}
