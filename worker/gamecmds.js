@@ -131,14 +131,13 @@ export async function gameCommand(i, env, ctx) {
       const sub = i.data.options[0];
       const o = Object.fromEntries((sub.options || []).map((x) => [x.name, x.value]));
       const perms = BigInt(i.member?.permissions || 0), isMod = !!((perms & 8n) || (perms & 32n) || (perms & (1n << 40n)));
-      if (["auto", "random"].includes(sub.name)) {
+      if (sub.name === "random") {
         const wait = await g.propCooldown(uid);
         if (wait) return err(`Slow down: you can post another bet in ${wait}s.`);
       }
-      if (sub.name === "auto" || sub.name === "random") {
+      if (sub.name === "random") {
         const ch = i.channel_id || i.channel?.id;
-        if (sub.name === "auto") await g.setPropsChannel(ch);   // future game days post here automatically
-        const r = sub.name === "auto" ? await g.ramsProps({ channel_id: ch, token: i.token, by: uid }) : await g.randomProp({ channel_id: ch, token: i.token, by: uid });
+        const r = await g.randomProp({ channel_id: ch, token: i.token, by: uid });
         if (r.error) return err(r.error);
         const props = r.props || [r.prop];
         // first bet is the reply; the rest go out as follow-ups (no extra bot permissions needed)

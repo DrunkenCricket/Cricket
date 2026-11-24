@@ -45,9 +45,8 @@ COMMANDS = [
          {"name": "Thin", "value": "thin"}, {"name": "Medium", "value": "med"}, {"name": "Large", "value": "large"}]}]},
     {"name": "ram", "description": "Show a ram", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose ram", "required": False}]},
-    {"name": "prop", "description": "Prop bets: post one, post the Rams set, or a random one", "type": 1, "contexts": [0],
+    {"name": "prop", "description": "Prop bets: post a random one, cancel yours, or check results", "type": 1, "contexts": [0],
      "options": [
-         {"type": 1, "name": "auto", "description": "Post this week's Rams bets (lines from Sleeper). Game days after this post here on their own."},
          {"type": 1, "name": "random", "description": "Post a totally random bet: any team, any player, any stat"},
          {"type": 1, "name": "cancel", "description": "Cancel a bet you posted (mods: any bet) and refund everyone", "options": [
              {"type": 4, "name": "id", "description": "Bet number", "required": True}]},

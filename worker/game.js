@@ -598,7 +598,6 @@ export class Game extends DurableObject {
   async tick() {
     if (!this.ctx.getWebSockets().length) { try { await this.pollMoments(); } catch (e) { console.log("moments", e); } }
     await this.grantOnce("launch50", 50, "Welcome gift");
-    try { await this.autoPost(); } catch (e) { console.log("autoPost", e); }
     for (const f of this.all("SELECT * FROM fights WHERE status='pending' AND created < ?", Date.now() - FIGHT_TTL)) {
       this.endFight(f, "expired");
       // Swap the Accept/Decline buttons for "Nobody showed up". The bot edits its own message; if Discord refuses,
