@@ -6,7 +6,7 @@ import { CRATE_COST, PICK_POINTS, PROP_COST, FIGHT_STAKE, STATS, propMessage, sh
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
-export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts", "moments"]);
+export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts", "moments", "herdcommands"]);
 
 const game = (env) => env.GAME.get(env.GAME.idFromName("main"));
 const who = (i) => i.member?.user || i.user;
@@ -84,6 +84,23 @@ export async function gameCommand(i, env, ctx) {
       const link = `${SITE}/lockeroom#t=${await lockerToken(env, uid)}`;
       return msg({ content: "🎒 **The Lockeroom**: unbox crates, buy more with RUTS, and dress your ram. This link is just for you and works for 2 hours.",
         components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Enter the Lockeroom", emoji: { name: "🎒" } }] }] }, true);
+    }
+
+    case "herdcommands": {
+      const line = (c, d) => `\`${c}\` ${d}`;
+      return msg({ embeds: [{
+        title: "🐏 Herd commands", color: GOLD, url: SITE,
+        fields: [
+          { name: "🏈 Pick'em", value: [line("/standings", "season leaderboard"), line("/mypicks", "your record and last week's picks")].join("\n") },
+          { name: "💰 RUTS", value: [line("/ruts", "your RUTS, crates and the top 10"), `Correct pick = **${PICK_POINTS} RUTS**. Everyone started with 50.`].join("\n") },
+          { name: "🐏 Your ram", value: [line("/crate", `open a crate (first is free, then ${CRATE_COST} RUTS)`), line("/lockeroom", "the website locker: unbox, shop and dress your ram"),
+            line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
+          { name: "🎲 Bets & fights", value: [line("/prop random", `post a random player bet (entry ${PROP_COST} RUTS, a hit wins a crate)`), line("/prop cancel", "cancel a bet you posted"),
+            line("/prop check", "settle finished bets now"), line("/fight", `challenge a ram: ${FIGHT_STAKE} RUTS each, winner takes all`)].join("\n") },
+          { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "show !flag / !TD GIFs on the website")].join("\n") },
+          { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Lockeroom](${SITE})` },
+        ],
+      }] });
     }
 
     case "moments": {
@@ -174,24 +191,26 @@ export async function gameCommand(i, env, ctx) {
   return err("Unknown command.");
 }
 
+// Crate results post in the channel for everyone to see (errors stay private).
 function crateReply(r, uid) {
   if (r.error) return err(r.error);
   const it = r.item;
   const lines = [
-    r.guaranteed ? "Your first crate always has a new look in it:" : r.bought ? `Bought for ${CRATE_COST} RUTS.` : "",
+    `<@${uid}> ${r.bought ? `bought a crate (${CRATE_COST} RUTS) and pulled:` : "opened a crate and pulled:"}`,
+    r.guaranteed ? "*First crate: a brand-new look.*" : "",
     `# ${it.name}`,
     `**${rarityName(it)}** ${SLOT_NAMES[it.slot] || it.slot}`,
-    r.dupe ? `Already had it, so you got **+${r.refund} RUTS** back.` : "",
+    r.dupe ? `Already had it, so they got **+${r.refund} RUTS** back.` : "",
     `\n💰 ${r.user.points} RUTS  •  📦 ${r.user.crates} crate${r.user.crates === 1 ? "" : "s"} left`,
   ].filter(Boolean);
   const buttons = [];
   if (!r.dupe) buttons.push({ type: 2, style: 1, custom_id: `equip:${it.id}`, label: "Equip it" });
-  buttons.push({ type: 2, style: 2, custom_id: "crate", label: r.user.crates > 0 ? "Open another" : `Buy another (${CRATE_COST})`, emoji: { name: "📦" } });
-  buttons.push({ type: 2, style: 5, url: `${SITE}/ram/${uid}`, label: "See my ram" });
+  buttons.push({ type: 2, style: 2, custom_id: "crate", label: "Open a crate", emoji: { name: "📦" } });
+  buttons.push({ type: 2, style: 5, url: `${SITE}/ram/${uid}`, label: "See the ram" });
   return msg({
-    embeds: [{ title: "📦 Crate opened", description: lines.join("\n"), color: color(it), image: { url: png(`${SITE}/ram/${uid}/${it.id}~${Date.now()}.svg`) } }],
+    embeds: [{ title: `📦 ${RARITY[it.rarity]?.label || "SECRET"} pull!`, description: lines.join("\n"), color: color(it), image: { url: png(`${SITE}/ram/${uid}/${it.id}~${Date.now()}.svg`) } }],
     components: [{ type: 1, components: buttons }],
-  }, true);
+  });
 }
 
 export function fightMessage(f) {

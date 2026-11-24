@@ -14,6 +14,7 @@ COMMANDS = [
     {"name": "standings", "description": "Season pick'em leaderboard", "type": 1, "contexts": [0]},
     {"name": "mypicks", "description": "Your pick'em record, or someone else's", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose record to show", "required": False}]},
+    {"name": "herdcommands", "description": "Every command for the pick'em, RUTS, rams, bets and fights", "type": 1, "contexts": [0]},
     # ram game
     {"name": "ruts", "description": "Your RUTS, crates and the RUTS leaderboard", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose RUTS to show", "required": False}]},
