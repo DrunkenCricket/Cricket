@@ -323,14 +323,14 @@ h1{margin:0;font:900 clamp(24px,5vw,40px)/1 system-ui,sans-serif;letter-spacing:
 .room::after{content:"";position:absolute;left:0;right:0;top:0;height:7%;background:linear-gradient(#0a1a40,#123a8f);box-shadow:0 4px 10px rgba(0,0,0,.5)}
 .bench{position:absolute;left:6%;right:6%;bottom:24%;height:4%;background:#a8703f;border-radius:6px;box-shadow:0 6px 0 #6b4423}
 .nums{position:absolute;left:0;right:0;top:9%;display:grid;grid-template-columns:repeat(8,1fr);text-align:center;font:800 13px system-ui;color:var(--gold);opacity:.85}
-.lr-ram{position:absolute;bottom:6%;left:30%;width:min(34vw,280px);transform:translateX(-50%);z-index:4}
+.lr-ram{position:absolute;bottom:6%;left:30%;width:min(34vw,280px);transform:translateX(-50%);z-index:12}
 .lr-ram img{width:100%;display:block;transform-origin:50% 90%}
 .crate{position:absolute;bottom:9%;left:70%;width:min(20vw,160px);transform:translateX(-50%);z-index:3}
 .crate svg{width:100%;display:block}.crate .lid{transform-box:fill-box;transform-origin:0% 100%}
 .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8}
 .word{position:absolute;left:58%;top:22%;transform:translateX(-50%);z-index:9;font:900 clamp(28px,6vw,60px)/1 system-ui;color:#ffd400;-webkit-text-stroke:3px #15172b;opacity:0;pointer-events:none}
 /* the reel */
-.reel{position:absolute;left:0;right:0;top:50%;height:150px;margin-top:-75px;background:rgba(5,8,20,.92);border-top:2px solid var(--gold);border-bottom:2px solid var(--gold);
+.reel{position:absolute;left:0;right:0;top:3%;height:150px;background:rgba(5,8,20,.92);border-top:2px solid var(--gold);border-bottom:2px solid var(--gold);
   overflow:hidden;z-index:10;display:none}
 .reel .strip{position:absolute;top:10px;left:0;display:flex;gap:8px;will-change:transform}
 .reel .card{width:130px;height:126px;flex:none;border-radius:10px;background:linear-gradient(#1c2650,#121937);border-bottom:5px solid;padding:10px;display:flex;flex-direction:column;justify-content:space-between}
@@ -420,6 +420,7 @@ function randomItem() {
 }
 const cardHtml = (i, win) => { const r = M.rarity[i[3]] || { label: "Secret", color: "#5ee08f" };
   return '<div class="card' + (win ? " win-target" : "") + '" style="border-bottom-color:' + r.color + '"><div class="e">' + (ICON[i[2]] || "🎁") + '</div><div class="n">' + h(i[1]) + '</div><div class="r" style="color:' + r.color + '">' + r.label + "</div></div>"; };
+const r0 = (i) => (M.rarity[i.rarity] || { color: "#5ee08f" }).color;
 async function unbox() {
   if (busy) return; busy = true; $("rev").style.display = "none";
   const btn = $("buy"); btn.disabled = true; btn.textContent = "Opening...";
@@ -443,16 +444,27 @@ async function unbox() {
   const cards = Array.from({ length: N }, (_, k) => k === WIN ? [won.id, won.name, won.slot, won.rarity] : randomItem());
   strip.innerHTML = cards.map((c, k) => cardHtml(c, k === WIN)).join("");
   strip.style.transition = "none"; strip.style.transform = "translateX(0)"; reel.style.display = "block";
+  // the ram hypes up in front of the reel while it spins
+  img.src = ramSrc("pose_hype");
+  const hype = img.animate([{ transform: "translateY(0) rotate(-3deg)" }, { transform: "translateY(-7%) rotate(3deg)" }, { transform: "translateY(0) rotate(-3deg)" }],
+    { duration: 420, iterations: Infinity, easing: "ease-in-out" });
   const target = WIN * W + 65 + (Math.random() - .5) * 90 - reel.clientWidth / 2;
   await sleep(60);
   strip.style.transition = "transform 5.2s cubic-bezier(.06,.7,.1,1)"; strip.style.transform = "translateX(" + (-target) + "px)";
-  await sleep(5400);
+  await sleep(3200);
+  hype.updatePlaybackRate(0.55);   // slows down with the reel, leaning in
+  await sleep(2200);
+  hype.cancel();
   strip.children[WIN].classList.add("win");
   await sleep(1100);
   reel.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300 }).finished.then(() => { reel.style.display = "none"; });
-  // 3. the ram tries it on
-  img.src = ramSrc(won.id);
-  img.animate([{ transform: "translateY(0)" }, { transform: "translateY(-10%)" }, { transform: "translateY(0)" }], { duration: 450, iterations: 2 });
+  // 3. the ram tries it on and celebrates (bigger for rarer pulls)
+  const big = ["epic", "legendary", "mythic", "secret"].includes(won.rarity);
+  img.src = ramSrc(won.id) + "?pose=" + (big ? "pose_roof" : "pose_td");
+  img.animate([{ transform: "translateY(0) scale(1)" }, { transform: "translateY(-" + (big ? 22 : 12) + "%) scale(" + (big ? 1.08 : 1.03) + ")" }, { transform: "translateY(0) scale(1)" }],
+    { duration: 480, iterations: big ? 4 : 2, easing: "ease-out" });
+  if (big) $("flash").animate([{ opacity: .6, background: r0(won) }, { opacity: 0 }], { duration: 900 });
+  setTimeout(() => { if (!busy) img.src = ramSrc(won.id); }, big ? 3500 : 2200);
   crate.querySelector(".lid").getAnimations().forEach((a) => a.cancel());
   const r = M.rarity[won.rarity] || { label: "SECRET", color: "#5ee08f" }, rv = $("rev");
   rv.style.display = "flex"; rv.style.borderLeftColor = r.color;
