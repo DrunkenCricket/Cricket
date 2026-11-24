@@ -689,8 +689,7 @@ export function renderRam(look = {}, size = 512, t = null) {
     @keyframes rb{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
     @keyframes rt{0%,50%,100%{transform:rotate(0)}25%{transform:rotate(5deg)}75%{transform:rotate(-5deg)}}
     @keyframes sw{0%,50%,100%{transform:rotate(var(--b))}25%{transform:rotate(calc(var(--b) - var(--s)))}75%{transform:rotate(calc(var(--b) + var(--s)))}}
-    @keyframes bl{0%{opacity:0}72%{opacity:1}78%{opacity:0}}
-    @media (prefers-reduced-motion:reduce){[class^=a-]{animation:none!important}}</style>` : "";
+    @keyframes bl{0%{opacity:0}72%{opacity:1}78%{opacity:0}}</style>` : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 512 512">${anim}<defs>${[...defs].join("")}${filters}</defs>${bg}${body2}</svg>`;
 }
 

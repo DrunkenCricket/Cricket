@@ -340,7 +340,7 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 .it{text-align:left;padding:10px;border-left-width:4px}.it small{display:block;color:var(--dim);font-weight:500;margin-top:2px}
 .it.on{background:#24305f;box-shadow:inset 0 0 0 1px var(--gold)}.it.on::after{content:" ✓";color:var(--gold)}
 .err{color:#ff8080}.empty{color:var(--dim);padding:24px;text-align:center}a{color:var(--gold)}
-@media (prefers-reduced-motion:reduce){.reel .strip{transition:none!important}}</style></head>
+</style></head>
 <body><main><h1>THE <span>LOCKEROOM</span></h1><div class="sub" id="sub">Loading...</div>
 <div class="room" id="room"><div class="nums">${[12, 99, 7, 24, 33, 81, 10, 2].map((n) => `<span>${n}</span>`).join("")}</div><div class="bench"></div>
 <div class="lr-ram" id="ram"><img alt="Your ram"></div>
@@ -463,7 +463,7 @@ ${FIELD_CSS}
 .banner{margin-top:16px;padding:14px 18px;border-radius:14px;background:#151d3b;font-size:18px;min-height:28px}
 .banner b{color:var(--gold)}button{margin-top:12px;background:var(--gold);color:#111;border:0;border-radius:10px;padding:10px 18px;font:700 15px system-ui;cursor:pointer}
 a{color:var(--gold)}
-@media (prefers-reduced-motion:reduce){.stars i{animation:none}}</style></head><body><main>
+</style></head><body><main>
 <h1>Fight #${f.id}: <span>${esc(f.a_name)}</span> vs <span>${esc(f.b_name)}</span></h1>
 <div class="stage field" id="st">${FIELD}
 <svg class="boom" id="boom" viewBox="-50 -50 100 100"><path d="M0 -48 L10 -16 L44 -28 L20 -2 L46 22 L12 16 L4 48 L-8 18 L-42 32 L-20 4 L-46 -20 L-12 -14 Z" fill="#fff6c2" stroke="#ffd400" stroke-width="4"/></svg>
@@ -652,7 +652,8 @@ function pasture() {
   sub.textContent = herd.rams.length + " rams on the field";
   if (!herd.rams.length) { view.innerHTML = '<div class="empty">No rams yet. Open your first crate with /crate in Discord.</div>'; return; }
   view.innerHTML = '<p class="note">Click a ram to see its gear. Get your own with /crate in Discord, or settle it with /fight.</p><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML + '</div>';
-  const pa = document.getElementById("pa"), still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Windows/Mac "reduce motion" settings only tone this down (no trotting bounce, no sprints); the rams still roam.
+  const pa = document.getElementById("pa"), calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const rnd = (a, b) => a + Math.random() * (b - a);
   const sheep = herd.rams.map((r) => {
     const el = document.createElement("a");
@@ -666,19 +667,19 @@ function pasture() {
   function step(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     for (const s of sheep) {
-      if (!still) {
+      {
         if (s.wait > 0) s.wait -= dt;
         else {
           const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
           if (d < 0.5) {   // arrived: short breather, then a new spot anywhere on the field (sometimes a sprint)
             s.wait = Math.random() < .25 ? rnd(1, 2.5) : rnd(0.1, 0.7);
-            s.tx = rnd(14, 86); s.ty = rnd(24, 96); s.speed = Math.random() < .2 ? rnd(22, 30) : rnd(9, 15);
+            s.tx = rnd(14, 86); s.ty = rnd(24, 96); s.speed = !calm && Math.random() < .2 ? rnd(22, 30) : rnd(9, 15);
           } else { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; s.t += dt * s.speed * 0.9; }
         }
       }
       const k = 0.6 + (s.y - 24) / 72 * 0.5;
       s.el.style.left = s.x + "%"; s.el.style.top = s.y + "%";
-      const hop = s.wait > 0 ? 0 : -Math.abs(Math.sin(s.t)) * 10;   // trotting bounce while moving
+      const hop = s.wait > 0 || calm ? 0 : -Math.abs(Math.sin(s.t)) * 10;   // trotting bounce while moving
       s.el.style.transform = "translateY(" + hop.toFixed(1) + "px) scale(" + k.toFixed(3) + ")"; s.el.style.transformOrigin = "50% 100%";
       s.el.style.zIndex = Math.round(s.y * 10);
     }
