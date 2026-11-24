@@ -2,7 +2,7 @@
 import { ITEMS, RARITY, SLOT_NAMES, BODY_TYPES } from "./ram.js";
 import { CRATE_COST, PICK_POINTS, PROP_COST, STATS, propMessage } from "./game.js";
 
-const SITE = "https://rams-bot.kantouth.workers.dev";
+const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
 export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop"]);
 

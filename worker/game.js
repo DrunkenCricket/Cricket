@@ -14,7 +14,7 @@ export const PICK_POINTS = 10, CRATE_COST = 60, PROP_COST = 20;
 const CSV_URL = "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/data/picks.csv";
 const ESPN = "https://site.api.espn.com/apis/site/v2/sports/football/nfl";
 const APP_ID = "1574684181361852416";
-const SITE = "https://rams-bot.kantouth.workers.dev";
+const SITE = "https://rams-bot.ramsherd.workers.dev";
 const UNCANNY_ODDS = 500;   // 1 in 500 crates, on top of the normal roll
 const GOLD = 0xffa300;
 
