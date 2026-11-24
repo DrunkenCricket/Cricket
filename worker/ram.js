@@ -456,6 +456,18 @@ const BGS = [
 ];
 for (const [k, n, r, svg] of BGS) item(`bg_${k}`, n, "bg", r, { svg });
 
+// ---------- POSES: arm angles in degrees at the shoulder (L positive = up and out, R mirrored), plus sway ----------
+export const POSES = {
+  idle: { L: 0, R: 0, s: 6 },
+};
+const POSE_LIST = [
+  ["hips", "Hands on Hips", "common", -30, 30, 2], ["shrug", "Shrug", "common", 45, -45, 6], ["wave", "Wave", "common", 0, -150, 18],
+  ["fist", "Fist Pump", "rare", 0, -150, 10], ["flex", "Flex", "rare", 95, -95, 4], ["point", "We're #1", "rare", 0, -160, 3],
+  ["td", "Touchdown", "rare", 158, -158, 3], ["roof", "Raise the Roof", "epic", 140, -140, 14], ["hype", "Hype Arms", "epic", 120, -120, 26],
+  ["victory", "Victory V", "legendary", 130, -130, 5],
+];
+for (const [k, n, r, L, R, sw] of POSE_LIST) { POSES[k] = { L, R, s: sw }; item(`pose_${k}`, n, "pose", r); }
+
 // ---------- FINISHES (whole-ram art styles) ----------
 export const FINISHES = { flat: "Flat", bold: "Bold Cartoon", street: "Street", sticker: "Sticker", holo: "Holo Sticker", uncanny: "Uncanny" };
 item("finish_flat", "Flat Finish", "finish", "common");
@@ -465,8 +477,8 @@ item("finish_sticker", "Sticker Finish", "finish", "legendary");
 item("finish_holo", "Holo Sticker Finish", "finish", "mythic");
 item("finish_uncanny", "Uncanny Finish", "finish", "secret");   // never listed in odds
 
-export const SLOTS = ["base", "bg","fleece", "horns", "shirt", "head", "eyes", "mouth", "neck", "hand", "feet", "gear", "tattoo", "marks", "finish"];
-export const SLOT_NAMES = { base: "Base", bg: "Background", fleece: "Fleece", horns: "Horns", shirt: "Shirt", head: "Head", eyes: "Eyes", mouth: "Mouth",
+export const SLOTS = ["base", "pose", "bg","fleece", "horns", "shirt", "head", "eyes", "mouth", "neck", "hand", "feet", "gear", "tattoo", "marks", "finish"];
+export const SLOT_NAMES = { base: "Base", pose: "Pose", bg: "Background", fleece: "Fleece", horns: "Horns", shirt: "Shirt", head: "Head", eyes: "Eyes", mouth: "Mouth",
   neck: "Neck", hand: "Hand", feet: "Feet", gear: "Gear", tattoo: "Tattoo", marks: "Marks", finish: "Finish" };
 
 // ---------- render ----------
@@ -475,9 +487,47 @@ const TUFT = [[220, 152, 28], [256, 140, 32], [292, 152, 28], [238, 172, 24], [2
 const GIRL_BUST = `<path d="M 206 346 C 214 372, 246 372, 254 352 M 258 352 C 266 372, 298 372, 306 346" fill="none" stroke="${OUT}" stroke-width="6" stroke-linecap="round" opacity=".75"/>
   <ellipse cx="228" cy="344" rx="22" ry="14" fill="#fff" opacity=".12"/><ellipse cx="284" cy="344" rx="22" ry="14" fill="#fff" opacity=".12"/>`;
 
-export function renderRam(look = {}, size = 512) {
+// Idle loop, 3.2s: body bounces twice, head tilts side to side, arms sway, one blink.
+// renderRam(look, size, t) draws frame t (0..1) for GIFs; renderRam(look, size, "css") returns an
+// SVG that animates itself in a browser; no t = still pose.
+export const LOOP_MS = 3200;
+const moves = (t, pose) => {
+  const p = 2 * Math.PI * t;
+  return { bob: -3.5 * (1 - Math.cos(2 * p)), tilt: 5 * Math.sin(p), armR: -pose.s * Math.sin(2 * p), armL: pose.s * Math.sin(2 * p), blink: t >= 0.72 && t < 0.78 };
+};
+const pivot = (d) => d.match(/M\s*([\d.]+)\s+([\d.]+)/).slice(1).map(Number);
+
+/** Re-aim the arms for a pose: straight-ish arm from the shoulder at the pose angle, longer when raised. */
+function poseArms(b, pose) {
+  const out = { ...b, upL: Math.abs(pose.L) >= 90, upR: Math.abs(pose.R) >= 90 };
+  for (const [side, ang] of [["L", pose.L], ["R", pose.R]]) {
+    if (!ang) continue;
+    const [px, py] = pivot(b["arm" + side]), [hx, hy] = b["hand" + side];
+    const a = (ang * Math.PI) / 180, vx = hx - px, vy = hy - py, len = Math.hypot(vx, vy) * (Math.abs(ang) >= 90 ? 1.8 : 1);
+    const ux = (vx * Math.cos(a) - vy * Math.sin(a)) / Math.hypot(vx, vy), uy = (vx * Math.sin(a) + vy * Math.cos(a)) / Math.hypot(vx, vy);
+    const ex = px + ux * len, ey = py + uy * len, bend = side === "L" ? -14 : 14;   // elbow bows outward
+    const cx = px + ux * len * 0.5 - uy * bend, cy = py + uy * len * 0.5 + ux * bend;
+    const f = (n) => n.toFixed(1);
+    out["arm" + side] = `M ${px} ${py} Q ${f(cx)} ${f(cy)} ${f(ex)} ${f(ey)}`;
+    out["upper" + side] = `M ${px} ${py} Q ${f(px + (cx - px) * 0.45)} ${f(py + (cy - py) * 0.45)} ${f(px + ux * len * 0.42)} ${f(py + uy * len * 0.42)}`;
+    out["hand" + side] = [ex, ey];
+  }
+  return out;
+}
+
+export function renderRam(look = {}, size = 512, t = null) {
   const I = (slot) => ITEMS[look[slot]];
-  const body = BODIES[(look.body || "").replace("body_", "")] || BODIES.med;
+  let body = BODIES[(look.body || "").replace("body_", "")] || BODIES.med;
+  const pose = POSES[(look.pose || "").replace("pose_", "")] || POSES.idle;
+  body = poseArms(body, pose);
+  const css = t === "css", m = moves(typeof t === "number" ? t : 0, pose);
+  const [pLx, pLy] = pivot(body.armL), [pRx, pRy] = pivot(body.armR);
+  // a group that moves: either a fixed transform for this frame, or a CSS animation class
+  const mv = (cls, transform, origin = "", vars = "") => css ? `class="a-${cls}" style="${origin ? `transform-origin:${origin};` : ""}${vars}"` : `transform="${transform}"`;
+  const gBob = mv("bob", `translate(0 ${m.bob.toFixed(2)})`);
+  const gHead = mv("head", `rotate(${m.tilt.toFixed(2)} 256 300)`, "256px 300px");
+  const gArmR = mv("armR", `rotate(${m.armR.toFixed(2)} ${pRx} ${pRy})`, `${pRx}px ${pRy}px`, `--b:0deg;--s:${pose.s}deg`);
+  const gArmL = mv("armL", `rotate(${m.armL.toFixed(2)} ${pLx} ${pLy})`, `${pLx}px ${pLy}px`, `--b:0deg;--s:${-pose.s}deg`);
   const girl = look.base === "girl" || look.base === "base_girl";
   const faceC = FACES[look.face] || FACES.tan;
   const fleeceItem = I("fleece") || ITEMS.fleece_cream;
@@ -505,7 +555,7 @@ export function renderRam(look = {}, size = 512) {
        <path d="${cut === "long" ? full : upper}" stroke="${sleeveC}" stroke-width="${body.arm}" fill="none" stroke-linecap="${cut === "long" ? "round" : "butt"}"/>`;
   const hands = [body.handL, body.handR].map(([x, y]) => uncanny
     ? `<path transform="translate(${x},${y})" d="M -12 -8 q -6 18 6 26 q 6 4 10 -2 q 4 6 10 2 q 6 -2 4 -12 q 4 -10 -8 -18 Z" fill="#e2bf98" stroke="#7a5634" stroke-width="2"/>`
-    : `<circle cx="${x}" cy="${y}" r="${body.arm * 0.7 + 4}" fill="${faceC}" ${S}/>`).join("");
+    : `<circle cx="${x}" cy="${y}" r="${body.arm * 0.7 + 4}" fill="${faceC}" ${S}/>`);
 
   const decoBody = { ...body, chest: [body.chest[0], body.chest[1] + (cut === "tank" ? 24 : girl ? 14 : 0)] };
   const id = "c" + Math.random().toString(36).slice(2, 7);
@@ -545,6 +595,7 @@ export function renderRam(look = {}, size = 512) {
     ${earOne}${mirror(earOne)}
     <path d="M 176 204 C 170 160, 210 136, 256 136 C 302 136, 342 160, 336 204 L 330 300 C 326 350, 296 380, 256 380 C 216 380, 186 350, 182 300 Z" fill="${faceC}" ${S}/>
     ${eyesBase}
+    ${uncanny ? "" : `<g ${css ? 'class="a-blink"' : `opacity="${m.blink ? 1 : 0}"`}><ellipse cx="222" cy="252" rx="22" ry="25" fill="${faceC}" ${S}/><ellipse cx="290" cy="252" rx="22" ry="25" fill="${faceC}" ${S}/><path d="M 204 256 q 18 10 36 0 M 272 256 q 18 10 36 0" stroke="${OUT}" stroke-width="6" fill="none" stroke-linecap="round"/></g>`}
     <ellipse cx="256" cy="324" rx="60" ry="46" fill="${look.face === "dark" ? "#6a5a52" : "#f1dfc0"}" ${S}/>
     <ellipse cx="238" cy="312" rx="8" ry="6" fill="${OUT}"/><ellipse cx="274" cy="312" rx="8" ry="6" fill="${OUT}"/>
     ${uncanny ? "" : `<path d="M 234 342 Q 258 358 282 336" fill="none" stroke="${OUT}" stroke-width="7" stroke-linecap="round"/>`}
@@ -555,15 +606,26 @@ export function renderRam(look = {}, size = 512) {
     ${I("head")?.svg || ""}
   </g>`;
 
+  // gloves and sweatbands ride on the hands, so they move with the arms
+  const handGear = /^gear_(gloves|bands)/.test(gear?.id || "");
+  const onHand = (side) => handGear ? gear.fn({ ...body, handL: side === "L" ? body.handL : [-999, -999], handR: side === "R" ? body.handR : [-999, -999] }) : "";
+  const [hL, hR] = hands;
+  const held = I("hand") ? `<g transform="translate(${body.handR[0]},${body.handR[1]})">${I("hand").svg}</g>` : "";
+  const armL = `${armBase(body.armL)}${sleeve(body.armL, body.upperL)}`, armR = `${armBase(body.armR)}${sleeve(body.armR, body.upperR)}`;
+  // raised arms go in front of the head and horns so they read
+  const upper = `${body.upL ? `<g ${gArmL}>${armL}${hL}${onHand("L")}</g>` : ""}${body.upR ? `<g ${gArmR}>${armR}${hR}${onHand("R")}${held}</g>` : ""}`;
   let ram = `${gear?.behind || ""}${neck?.behind || ""}
     ${legs}${feet}
-    ${armBase(body.armL)}${armBase(body.armR)}${sleeve(body.armL, body.upperL)}${sleeve(body.armR, body.upperR)}
-    ${torso}${tattoo}${marks && !marks.face ? marks.fn(body) : ""}
-    ${gear?.fn ? gear.fn(body) : ""}
-    ${hands}
-    ${I("hand") ? `<g transform="translate(${body.handR[0]},${body.handR[1]})">${I("hand").svg}</g>` : ""}
-    ${head}
-    ${neck?.svg || ""}
+    <g ${gBob}>
+      ${body.upL ? "" : `<g ${gArmL}>${armL}</g>`}${body.upR ? "" : `<g ${gArmR}>${armR}</g>`}
+      ${torso}${tattoo}${marks && !marks.face ? marks.fn(body) : ""}
+      ${gear?.fn && !handGear ? gear.fn(body) : ""}
+      ${body.upL ? "" : `<g ${gArmL}>${hL}${onHand("L")}</g>`}
+      ${body.upR ? "" : `<g ${gArmR}>${hR}${onHand("R")}${held}</g>`}
+      <g ${gHead}>${head}</g>
+      ${neck?.svg || ""}
+      ${upper}
+    </g>
     ${gear?.front || ""}`;
 
   const bg = I("bg")?.svg || solid("#1b2440", "#243258");
@@ -593,7 +655,17 @@ export function renderRam(look = {}, size = 512) {
       <feColorMatrix values="0 0 0 0 .35  0 0 0 0 .27  0 0 0 0 .18  0 0 0 .45 0"/><feComposite in2="SourceGraphic" operator="in"/><feBlend in="SourceGraphic" mode="multiply"/></filter>`;
     body2 = `<g filter="url(#fur)">${body2.replace(new RegExp(`stroke="${OUT}" stroke-width="(9|6)"`, "g"), 'stroke="#5a4030" stroke-width="2"')}</g>`;
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 512 512"><defs>${[...defs].join("")}${filters}</defs>${bg}${body2}</svg>`;
+  const anim = css ? `<style>
+    .a-bob{animation:rb ${LOOP_MS / 2}ms ease-in-out infinite}
+    .a-head{transform-box:view-box;animation:rt ${LOOP_MS}ms ease-in-out infinite}
+    .a-armR,.a-armL{transform-box:view-box;animation:sw ${LOOP_MS / 2}ms ease-in-out infinite}
+    .a-blink{opacity:0;animation:bl ${LOOP_MS}ms steps(1) infinite}
+    @keyframes rb{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+    @keyframes rt{0%,50%,100%{transform:rotate(0)}25%{transform:rotate(5deg)}75%{transform:rotate(-5deg)}}
+    @keyframes sw{0%,50%,100%{transform:rotate(var(--b))}25%{transform:rotate(calc(var(--b) - var(--s)))}75%{transform:rotate(calc(var(--b) + var(--s)))}}
+    @keyframes bl{0%{opacity:0}72%{opacity:1}78%{opacity:0}}
+    @media (prefers-reduced-motion:reduce){[class^=a-]{animation:none!important}}</style>` : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 512 512">${anim}<defs>${[...defs].join("")}${filters}</defs>${bg}${body2}</svg>`;
 }
 
 export function slotCounts() {
