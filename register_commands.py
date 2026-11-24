@@ -63,6 +63,9 @@ req = urllib.request.Request(
              "User-Agent": "DiscordBot (https://github.com/DrunkenCricket/Cricket, 1.0)"})
 try:
     with urllib.request.urlopen(req, timeout=20) as r:
-        print("Registered:", ", ".join("/" + c["name"] for c in json.load(r)))
+        for c in json.load(r):
+            subs = [o["name"] for o in c.get("options", []) if o.get("type") == 1]
+            print(f"/{c['name']:<10} who: {'everyone' if not c.get('default_member_permissions') else 'perm ' + c['default_member_permissions']}"
+                  f"  v{c.get('version')}" + (f"  subs: {', '.join(subs)}" if subs else ""))
 except urllib.error.HTTPError as e:
     sys.exit(f"Discord {e.code}: {e.read().decode(errors='replace')}")
