@@ -230,13 +230,20 @@ async function liveData(ctx) {
   const comp = sum.header?.competitions?.[0] || {};
   const st = comp.status?.type || {};
   const teams = (comp.competitors || []).map((c) => ({ id: c.team?.id, abbr: c.team?.abbreviation, score: c.score ?? "0",
-    home: c.homeAway === "home", color: "#" + (c.team?.color || "555"), logo: c.team?.logos?.[0]?.href || c.team?.logo || "", poss: !!c.possession }));
+    home: c.homeAway === "home", color: "#" + (c.team?.color || "555"), alt: "#" + (c.team?.alternateColor || "ffffff"), logo: c.team?.logos?.[0]?.href || c.team?.logo || "", poss: !!c.possession }));
   const out = { state: st.state || ev.state, detail: st.shortDetail || st.detail || "", date: ev.date, event: ev.id, teams, plays: [], drive: null };
   const dr = sum.drives || {};
   const drives = [...(dr.previous || []), ...(dr.current ? [dr.current] : [])];
   const flat = [];
   for (const d of drives) for (const p of d.plays || []) flat.push({ p, d });
   out.stats = boxStats(sum);
+  if (out.state === "in") {   // timeouts live on the scoreboard's situation, not the summary
+    try {
+      const sb = await fetch(NFL + "/scoreboard", { cf: { cacheTtl: 8 } }).then((r) => r.json());
+      const sit = (sb.events || []).find((e) => e.id === ev.id)?.competitions?.[0]?.situation;
+      if (sit) for (const t of teams) t.to = t.home ? sit.homeTimeouts : sit.awayTimeouts;
+    } catch {}
+  }
   out.plays = flat.slice(-14).reverse().map(({ p, d }) => ({ ...playOut(p), abbr: d.team?.abbreviation || "" }));
   const last = flat[flat.length - 1];
   if (last && out.state !== "post") {   // where the ball is now
@@ -771,6 +778,7 @@ const PAGE = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rams Pick'em</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,700..900&display=swap">
 <style>
 :root{--bg:#0e1116;--card:#171b22;--card2:#1e232c;--line:#2a303b;--text:#e8ebf0;--muted:#8b93a1;
 --blue:#003594;--gold:#ffa300;--good:#2fbf71;--bad:#e5484d}
@@ -822,15 +830,17 @@ td.n{font-variant-numeric:tabular-nums}
 h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacing:1px;margin:26px 0 10px}
 .pasture{height:560px}
 .lvbug{margin:0 0 10px}.lvbug:empty{display:none}
-.sbug{display:inline-flex;align-items:stretch;max-width:100%;border-radius:10px;overflow:hidden;background:#0a0f22;box-shadow:0 6px 20px #0008;border:1px solid #ffffff22;font-family:system-ui,sans-serif;position:relative}
-.sb-t{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 85%,#fff 15%),var(--c));color:#fff;position:relative;min-width:112px}
-.sb-t+.sb-t{border-left:2px solid #0a0f22}.sb-t img{width:30px;height:30px;filter:drop-shadow(0 1px 2px #0008)}
-.sb-t b{font-weight:900;font-size:17px;letter-spacing:1px}.sb-t .sc{margin-left:auto;font-weight:900;font-size:26px;font-variant-numeric:tabular-nums;text-shadow:0 2px 3px #0006}
-.sb-pos{position:absolute;left:0;right:0;bottom:0;height:4px;background:#ffc82c;box-shadow:0 0 8px #ffc82c}
-.sb-clk{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:4px 14px;background:#0a0f22;color:#fff;min-width:70px}
-.sb-clk b{font-size:13px;font-weight:900;letter-spacing:1px;color:#ffc82c}.sb-clk span{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
-.sb-dd{display:flex;align-items:center;padding:0 14px;background:#ffc82c;color:#0a0f22;font-weight:900;font-size:15px;white-space:nowrap}
-.lvdot{position:absolute;top:5px;left:5px;z-index:2;width:7px;height:7px;border-radius:50%;background:#ff3b3b;animation:blink 1s infinite}
+.lvbug{display:flex;justify-content:center;padding:26px 8px 12px;margin:0 0 10px;border-radius:14px;background:linear-gradient(180deg,transparent,#0008 40%,#000c)}
+.fbug{display:flex;align-items:center;gap:0;font-family:Archivo,system-ui,sans-serif;font-stretch:125%;max-width:100%}
+.fb-team{position:relative;background:var(--c);padding:6px 16px;min-width:84px;text-align:center;border-radius:4px}
+.fb-team b{display:block;font-weight:900;font-size:30px;line-height:1;letter-spacing:1px;color:#fff;-webkit-text-stroke:2px var(--a);paint-order:stroke fill}
+.fb-dd{position:absolute;left:0;right:0;bottom:100%;margin-bottom:3px;background:var(--c);border:2px solid var(--a);color:#fff;font:italic 800 13px/1 Archivo,system-ui,sans-serif;font-stretch:85%;padding:4px 6px;border-radius:4px;white-space:nowrap}
+.fb-to{position:absolute;left:12px;right:12px;top:100%;margin-top:4px;display:flex;gap:5px}.fb-to i{flex:1;height:4px;border-radius:2px;background:#e9edf5}.fb-to i.used{background:#ffffff2a}
+.fb-sc{min-width:66px;padding:0 10px;text-align:center;font-weight:900;font-size:42px;line-height:1;color:#eef1f6;text-shadow:0 0 10px #000,0 0 18px #000a;font-variant-numeric:tabular-nums}
+.fb-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0a0f22b3;border:1px solid #ffffff22;border-radius:4px;padding:5px 14px;min-width:86px}
+.fb-mid b{font-weight:900;font-size:24px;line-height:1;color:#fff;font-variant-numeric:tabular-nums}.fb-mid span{font-weight:800;font-size:12px;letter-spacing:1px;color:#c9cfdd;margin-top:3px}
+@media (max-width:560px){.fb-team{min-width:60px;padding:5px 9px}.fb-team b{font-size:21px}.fb-sc{font-size:30px;min-width:44px;padding:0 6px}.fb-mid{min-width:64px;padding:4px 8px}.fb-mid b{font-size:18px}}
+.lvdot{display:none;position:absolute;top:5px;left:5px;z-index:2;width:7px;height:7px;border-radius:50%;background:#ff3b3b;animation:blink 1s infinite}
 @keyframes blink{50%{opacity:.2}}
 .lvchart{position:absolute;inset:0;z-index:1100;pointer-events:none}
 .dc{position:absolute;height:12px;margin-top:-6px;border-radius:6px;box-shadow:0 1px 3px #0007}
@@ -852,10 +862,11 @@ h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacin
 .lvplays,.lvstats{display:grid;gap:6px}.lvgrid h3{margin:0 0 2px;font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
 .lvtabs{display:flex;gap:6px}.lvtabs button{flex:1;background:#0f1733;color:#fff;border:1px solid #23305e;border-radius:10px;padding:6px;font-weight:800;cursor:pointer}
 .lvtabs button.on{background:#ffc82c;color:#15172b;border-color:#ffc82c}
-.lvst{width:100%;border-collapse:collapse;background:#0f1733;border:1px solid #23305e;border-radius:12px;overflow:hidden;font-size:13px}
+.lvst{width:100%;table-layout:fixed;border-collapse:collapse;background:#0f1733;border:1px solid #23305e;border-radius:12px;overflow:hidden;font-size:13px}
 .lvst th{background:#16204a;color:var(--dim);font-weight:800;text-align:right;padding:5px 8px;font-size:11px;letter-spacing:.5px}
 .lvst th:first-child{text-align:left;color:#ffc82c;font-size:12px}.lvst td{padding:5px 8px;text-align:right;border-top:1px solid #1d2850;font-variant-numeric:tabular-nums}
-.lvst td:first-child{text-align:left;font-weight:700}.lvst td small{color:var(--dim);font-weight:500}
+.lvst th:first-child,.lvst td:first-child{width:44%}.lvst td:first-child{text-align:left;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lvst td small{display:inline-block;width:3.2em;color:var(--dim);font-weight:600}
 .lvp{background:#0f1733;border:1px solid #23305e;border-radius:12px;padding:8px 12px;font-size:14px;line-height:1.35}
 .lvp small{display:block;color:var(--dim);font-size:12px;margin-bottom:2px}.lvp.sc{border-color:#ffc82c;background:#2a2410}.lvp.to{border-color:#ff5e5e}
 .lvp:first-child{border-width:2px}
@@ -971,14 +982,19 @@ function drawLive() {
   if (!L || L.state === "none" || !L.teams || L.teams.length < 2) { bug.innerHTML = ""; return; }
   const away = L.teams.find((t) => !t.home) || L.teams[0], home = L.teams.find((t) => t.home) || L.teams[1];
   const d = L.drive, pre = L.state === "pre";
-  // broadcast-style bug: a color slab per team, then the clock block and the down & distance
-  const slab = (t) => '<div class="sb-t" style="--c:' + t.color + '">' + (t.logo ? '<img alt="" src="' + t.logo + '">' : "") + '<b>' + esc(t.abbr) + '</b>'
-    + (pre ? "" : '<span class="sc">' + esc(t.score) + '</span>') + (L.state === "in" && d && d.team === t.id ? '<i class="sb-pos"></i>' : "") + '</div>';
-  let clock = esc(L.detail), dd = "";
-  if (pre) clock = '<b>NEXT</b><span>' + esc(new Date(L.date).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })) + '</span>';
-  else if (L.state === "post") clock = '<b>FINAL</b>';
-  else { const part = L.detail.split(" - "); clock = '<b>' + esc(part[0] || "") + '</b>' + (part[1] ? '<span>' + esc(part[1]) + '</span>' : ""); if (d && d.down) dd = '<div class="sb-dd">' + esc(d.down) + '</div>'; }
-  bug.innerHTML = '<div class="sbug">' + (L.state === "in" ? '<i class="lvdot"></i>' : "") + slab(away) + slab(home) + '<div class="sb-clk">' + clock + '</div>' + dd + '</div>';
+  // FOX-style bug: team-color boxes with outlined initials, huge floating scores, the clock in the middle,
+  // down & distance in a tab over the team with the ball, timeouts as three dashes under each team
+  const pos = L.state === "in" && d ? d.team : null;
+  const box = (t) => '<div class="fb-team" style="--c:' + t.color + ';--a:' + t.alt + '">'
+    + (pos === t.id && d.down ? '<div class="fb-dd">' + esc(d.down.replace(/ at .*/, "")) + '</div>' : "")
+    + '<b>' + esc(t.abbr) + '</b>'
+    + (L.state === "in" ? '<div class="fb-to">' + [0, 1, 2].map((k) => '<i class="' + (t.to != null && k >= t.to ? "used" : "") + '"></i>').join("") + '</div>' : "") + '</div>';
+  const score = (t) => '<div class="fb-sc">' + (pre ? "" : esc(t.score)) + '</div>';
+  let mid;
+  if (pre) mid = '<b>' + esc(new Date(L.date).toLocaleString([], { weekday: "short" })) + '</b><span>' + esc(new Date(L.date).toLocaleString([], { hour: "numeric", minute: "2-digit" })) + '</span>';
+  else if (L.state === "post") mid = '<b>FINAL</b>';
+  else { const part = L.detail.split(" - "); mid = '<b>' + esc(part[1] || part[0] || "") + '</b>' + (part[1] ? '<span>' + esc(part[0]) + '</span>' : ""); }
+  bug.innerHTML = '<div class="fbug">' + box(away) + score(away) + '<div class="fb-mid">' + mid + '</div>' + score(home) + box(home) + '</div>';
   if (pre) return;
   if (L.state === "in" && d) {
     el("lvlos").style.left = yx(d.ball) + "%"; el("lvlos").hidden = false;
@@ -1002,7 +1018,7 @@ function drawLive() {
   const NAMES = { passing: "Passing", rushing: "Rushing", receiving: "Receiving", defensive: "Defense" };
   el("lvstats").innerHTML = '<div class="lvtabs">' + st.slice().sort((a) => a.id === "14" ? -1 : 1).map((t) => '<button data-side="' + t.id + '" class="' + (t === side ? "on" : "") + '">' + esc(t.abbr) + '</button>').join("") + '</div>'
     + side.cats.map((c) => '<table class="lvst"><tr><th>' + NAMES[c.name] + '</th>' + c.cols.map((h) => '<th>' + esc(h) + '</th>').join("") + '</tr>'
-      + c.rows.map((r) => '<tr><td>' + esc(r.name) + (r.num ? ' <small>#' + esc(r.num) + '</small>' : "") + '</td>' + r.stats.map((v) => '<td>' + esc(v) + '</td>').join("") + '</tr>').join("") + '</table>').join("");
+      + c.rows.map((r) => '<tr><td>' + (r.num ? '<small>#' + esc(r.num) + '</small>' : '<small></small>') + esc(r.name) + '</td>' + r.stats.map((v) => '<td>' + esc(v) + '</td>').join("") + '</tr>').join("") + '</table>').join("");
   el("lvstats").querySelectorAll("[data-side]").forEach((b) => b.onclick = () => { liveSide = b.dataset.side; drawLive(); });
 }
 // a fresh big play on the real field sets the herd off
