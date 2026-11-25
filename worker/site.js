@@ -183,6 +183,52 @@ async function historyData(env, ctx) {
 // ---------- routes ----------
 
 // Everyone with a ram, plus everyone who has made a pick (they get the default ram until they open a crate).
+// ---------- Live play-by-play for the Herd field (ESPN game summary) ----------
+// Field coordinates: the Rams goal line is on the left. ball/first are yards from the Rams goal line.
+const NFL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl";
+const RAMS_ID = "14";
+async function ramsEvent(ctx) {
+  return cached(ctx, "live-event", 300, async () => {
+    const sb = await fetch(NFL + "/scoreboard", { cf: { cacheTtl: 60 } }).then((r) => r.json());
+    const ev = (sb.events || []).find((e) => e.competitions?.[0]?.competitors?.some((c) => c.team?.id === RAMS_ID));
+    return ev ? { id: ev.id, date: ev.date, state: ev.status?.type?.state } : null;
+  });
+}
+function playOut(p) {
+  const team = p.end?.team?.id || p.start?.team?.id;
+  return { id: p.id, text: p.text || "", type: p.type?.text || "", q: p.period?.number, clock: p.clock?.displayValue || "",
+    dd: p.start?.down ? p.start.shortDownDistanceText || "" : "", yds: p.statYardage ?? null,
+    score: !!p.scoringPlay, turnover: !!p.isTurnover, team: p.start?.team?.id || team };
+}
+async function liveData(ctx) {
+  const ev = await ramsEvent(ctx);
+  if (!ev) return { state: "none" };
+  const sum = await fetch(NFL + "/summary?event=" + ev.id, { cf: { cacheTtl: 8 } }).then((r) => r.json());
+  const comp = sum.header?.competitions?.[0] || {};
+  const st = comp.status?.type || {};
+  const teams = (comp.competitors || []).map((c) => ({ id: c.team?.id, abbr: c.team?.abbreviation, score: c.score ?? "0",
+    home: c.homeAway === "home", color: "#" + (c.team?.color || "555"), logo: c.team?.logos?.[0]?.href || c.team?.logo || "", poss: !!c.possession }));
+  const out = { state: st.state || ev.state, detail: st.shortDetail || st.detail || "", date: ev.date, event: ev.id, teams, plays: [], drive: null };
+  const dr = sum.drives || {};
+  const drives = [...(dr.previous || []), ...(dr.current ? [dr.current] : [])];
+  const flat = [];
+  for (const d of drives) for (const p of d.plays || []) flat.push({ p, d });
+  out.plays = flat.slice(-14).reverse().map(({ p, d }) => ({ ...playOut(p), abbr: d.team?.abbreviation || "" }));
+  const last = flat[flat.length - 1];
+  if (last && out.state !== "post") {   // where the ball is now
+    const e = last.p.end || {}, team = e.team?.id;
+    if (e.yardsToEndzone != null && team) {
+      const rams = team === RAMS_ID, ball = rams ? 100 - e.yardsToEndzone : e.yardsToEndzone;
+      const first = e.down ? Math.max(0, Math.min(100, rams ? ball + e.distance : ball - e.distance)) : null;
+      const d = last.d;
+      out.drive = { team, rams, ball, first, down: e.downDistanceText || e.shortDownDistanceText || "",
+        summary: d.description || "", abbr: d.team?.abbreviation || "",
+        start: d.start?.yardsToEndzone != null ? (rams ? 100 - d.start.yardsToEndzone : d.start.yardsToEndzone) : null };
+    }
+  }
+  return out;
+}
+
 async function herdData(env, ctx) {
   const hist = await historyData(env, ctx);
   const herd = new Map(hist.standings.map((p) => [p.id, { id: p.id, name: p.name, avatar: p.avatar, points: 0 }]));
@@ -238,6 +284,7 @@ export async function handleSite(request, env, ctx) {
     if (pathname === "/api/history") return json(await historyData(env, ctx), 120);
     if (pathname === "/api/herd") return json(await herdData(env, ctx), 60);
     if (pathname === "/api/bets") return json(await betsData(env, ctx), 30);
+    if (pathname === "/api/live") return json(await liveData(ctx), 8);
     const pm = pathname.match(/^\/api\/player\/(\d{5,25})$/);   // public game stats: RUTS, crates, history
     if (pm && env.GAME) { const l = await env.GAME.get(env.GAME.idFromName("main")).locker(pm[1]); delete l.look; return json(l, 15); }
   } catch (e) {
@@ -742,6 +789,20 @@ td.n{font-variant-numeric:tabular-nums}
 .fight:hover{border-color:var(--gold)}.fight b{color:var(--gold)}.fight.expired,.fight.declined,.fight.cancelled{opacity:.55}.fight u{color:var(--gold)}
 h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacing:1px;margin:26px 0 10px}
 .pasture{height:560px}
+.lvbug{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#0b1430;border:1px solid #23305e;border-radius:14px;padding:8px 12px;margin:0 0 10px}
+.lvbug:empty{display:none}.lvbug .tm{display:flex;align-items:center;gap:6px;font-weight:800;font-size:18px}.lvbug .tm img{width:28px;height:28px}
+.lvbug .tm.pos::after{content:"🏈";font-size:13px}.lvbug .st{color:var(--gold);font-weight:800;margin-left:auto;font-size:14px}
+.lvbug .dn{background:#ffc82c;color:#15172b;border-radius:8px;padding:2px 8px;font-weight:900;font-size:13px}.lvbug .lvdot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.2}}
+.lv-zone{position:absolute;top:0;bottom:0;z-index:1;pointer-events:none;opacity:.28;transition:left .8s,width .8s}
+.lv-los,.lv-fd{position:absolute;top:0;bottom:0;width:4px;margin-left:-2px;z-index:2;pointer-events:none;transition:left .8s}
+.lv-los{background:#2d7bff;box-shadow:0 0 8px #2d7bff}.lv-fd{background:#ffd400;box-shadow:0 0 8px #ffd400}
+.lv-ball{position:absolute;top:13%;z-index:1200;transform:translateX(-50%);transition:left .8s;pointer-events:none;text-align:center}
+.lv-ball i{display:block;width:44px;height:26px;margin:0 auto}.lv-ball b{display:inline-block;margin-top:3px;background:#15172b;color:#fff;border:2px solid #ffc82c;border-radius:8px;padding:1px 7px;font-size:12px;white-space:nowrap}
+.lvplays{margin-top:10px;display:grid;gap:6px}.lvplays:empty{display:none}
+.lvp{background:#0f1733;border:1px solid #23305e;border-radius:12px;padding:8px 12px;font-size:14px;line-height:1.35}
+.lvp small{display:block;color:var(--dim);font-size:12px;margin-bottom:2px}.lvp.sc{border-color:#ffc82c;background:#2a2410}.lvp.to{border-color:#ff5e5e}
+.lvp:first-child{border-width:2px}
 ${FIELD_CSS}
 .rw{position:absolute;width:150px;margin-left:-75px;margin-top:-150px;text-align:center;cursor:pointer;text-decoration:none;color:#fff}
 .rw img{width:150px;height:150px;display:block;transition:transform .25s}
@@ -840,6 +901,60 @@ function myId() {
   try { const t = localStorage.getItem("lr_t"); if (t && Number(t.split(".")[1]) * 1000 > Date.now()) return t.split(".")[0]; } catch {}
   return null;
 }
+// ---------- Live play-by-play: ESPN-style drive tracker on the Herd field ----------
+let live = null, liveSeen = null;
+const yx = (y) => 8 + Math.max(0, Math.min(100, y)) * 0.84;   // yards from the Rams goal line to field %
+const BALLSVG = '<svg viewBox="-20 -12 40 24" width="100%" height="100%"><ellipse rx="18" ry="10" fill="#8b4a22" stroke="#15172b" stroke-width="3"/><path d="M -7 0 L 7 0 M -4 -3 l 0 6 M 0 -3 l 0 6 M 4 -3 l 0 6" stroke="#fff" stroke-width="2"/></svg>';
+function drawLive() {
+  const bug = document.getElementById("lvbug");
+  if (!bug) return;
+  const L = live, el = (id) => document.getElementById(id);
+  ["lvzone", "lvlos", "lvfd", "lvball"].forEach((id) => { el(id).hidden = true; });
+  el("lvplays").innerHTML = "";
+  if (!L || L.state === "none" || !L.teams || L.teams.length < 2) { bug.innerHTML = ""; return; }
+  const away = L.teams.find((t) => !t.home) || L.teams[0], home = L.teams.find((t) => t.home) || L.teams[1];
+  const tm = (t) => '<span class="tm' + (L.state === "in" && L.drive && L.drive.team === t.id ? " pos" : "") + '">' + (t.logo ? '<img alt="" src="' + t.logo + '">' : "") + esc(t.abbr) + (L.state === "pre" ? "" : " " + esc(t.score)) + '</span>';
+  if (L.state === "pre") {
+    const when = new Date(L.date).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+    bug.innerHTML = '<span class="dim">Next game</span>' + tm(away) + '<span class="dim">@</span>' + tm(home) + '<span class="st">' + esc(when) + '</span>';
+    return;
+  }
+  const d = L.drive;
+  bug.innerHTML = (L.state === "in" ? '<span class="lvdot"></span>' : "") + tm(away) + tm(home)
+    + (L.state === "in" && d && d.down ? '<span class="dn">' + esc(d.down) + '</span>' : "") + '<span class="st">' + esc(L.detail) + '</span>';
+  if (L.state === "in" && d) {
+    const team = L.teams.find((t) => t.id === d.team);
+    if (d.start != null) { const z = el("lvzone"), a = Math.min(d.start, d.ball), b = Math.max(d.start, d.ball);
+      z.style.left = yx(a) + "%"; z.style.width = (yx(b) - yx(a)) + "%"; z.style.background = team ? team.color : "#fff"; z.hidden = false; }
+    el("lvlos").style.left = yx(d.ball) + "%"; el("lvlos").hidden = false;
+    if (d.first != null) { el("lvfd").style.left = yx(d.first) + "%"; el("lvfd").hidden = false; }
+    const bl = el("lvball"); bl.style.left = yx(d.ball) + "%"; bl.firstChild.innerHTML = BALLSVG;
+    bl.lastChild.textContent = (d.rams ? "▶ " : "◀ ") + (d.abbr || "") + (d.down ? " · " + d.down : ""); bl.hidden = false;
+  }
+  el("lvplays").innerHTML = (L.plays || []).slice(0, 10).map((p) => '<div class="lvp' + (p.score ? " sc" : p.turnover ? " to" : "") + '"><small>'
+    + esc((p.q ? "Q" + p.q + " " : "") + p.clock + " · " + (p.abbr || "") + (p.dd ? " · " + p.dd : "") + (p.type ? " · " + p.type : "")) + '</small>' + esc(p.text) + '</div>').join("");
+}
+// a fresh big play on the real field sets the herd off
+function liveReact(plays) {
+  const ids = new Set(plays.map((p) => p.id));
+  if (liveSeen && herdHandler) {
+    const fresh = plays.filter((p) => !liveSeen.has(p.id));
+    for (const p of fresh) {
+      const ramsBall = p.team === "14", t = p.type.toLowerCase();
+      let cmd = null;
+      if (p.score && ramsBall && /field goal/.test(t)) cmd = "itsgood";
+      else if (p.score && ramsBall && /touchdown/.test(t)) cmd = "td";
+      else if (p.turnover && !ramsBall) cmd = /fumble/.test(t + " " + p.text.toLowerCase()) ? "fumble" : "int";
+      if (cmd) { herdHandler({ t: "fx", cmd }); break; }
+    }
+  }
+  liveSeen = ids;
+}
+function pollLive() {
+  if (tab !== "herd" || document.hidden) return;
+  fetch("/api/live").then((r) => r.json()).then((d) => { if (d.error) return; live = d; if (d.plays) liveReact(d.plays); drawLive(); }).catch(() => {});
+}
+setInterval(pollLive, 10000);
 function pasture() {
   if (!herd) { view.innerHTML = '<div class="empty">Rounding up the herd...</div>'; return; }
   const me = myId(), mine = herd.rams.some((r) => r.id === me);
@@ -847,7 +962,10 @@ function pasture() {
   if (!herd.rams.length) { view.innerHTML = '<div class="empty">No rams yet. Open your first crate with /crate in Discord.</div>'; return; }
   const note = mine ? "<b>Your ram has the gold tag.</b> Click anywhere on the field to walk there, or use the arrow keys / WASD. Everyone watching sees you move."
     : "Click a ram to see its gear. Want to drive your own? Run <b>/lockeroom</b> in Discord, open the link once, then come back here.";
-  view.innerHTML = '<p class="note">' + note + '</p><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML + '</div>';
+  view.innerHTML = '<p class="note">' + note + '</p><div class="lvbug" id="lvbug"></div><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML
+    + '<div class="lv-zone" id="lvzone" hidden></div><div class="lv-los" id="lvlos" hidden></div><div class="lv-fd" id="lvfd" hidden></div><div class="lv-ball" id="lvball" hidden><i></i><b></b></div>'
+    + '</div><div class="lvplays" id="lvplays"></div>';
+  drawLive();
   // Windows/Mac "reduce motion" settings only tone this down (no trotting bounce, no sprints); the rams still roam.
   const pa = document.getElementById("pa"), calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -1170,7 +1288,7 @@ function render() {
   cancelAnimationFrame(raf);
   if (tab !== "herd") herdHandler = null;
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
-  if (tab === "herd") { pasture(); return; }
+  if (tab === "herd") { pasture(); if (!live) pollLive(); return; }
   if (tab === "bets") { betsView(); return; }
   if (tab === "week") {
     if (!week) return;
