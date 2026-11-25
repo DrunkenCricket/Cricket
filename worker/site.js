@@ -1443,7 +1443,7 @@ function bingoView() {
       + B.card.map((c, i) => '<div class="bgsq' + (c.id === "free" ? " free" : "") + (on(i) ? " hit" : "") + (win.has(i) ? " win" : "") + '"><span>' + esc(c.label) + '</span>' + (on(i) && c.id !== "free" ? '<i></i>' : "") + '</div>').join("")
       + '</div></div><div class="bgside">'
       + '<div class="bgstat"><b>' + marked + '<small>/24</small></b><span>marked</span></div><div class="bgstat' + (n ? " gold" : "") + '"><b>' + n + '</b><span>' + (n === 1 ? "BINGO!" : n ? "BINGOS!" : "bingos") + '</span></div>'
-      + '<div class="bgstat' + (n ? " gold" : "") + '"><b>\u{1F381}</b><span>' + (marked === 24 ? "BLACKOUT! " + ((B.crates || 5) + (B.blackout || 10)) + " crates are yours" : n ? (B.crates || 5) + " crates are yours. Blackout adds " + (B.blackout || 10) + " more" : "Any bingo pays " + (B.crates || 5) + " crates. Blackout pays " + (B.blackout || 10)) + '</span></div>'
+      + '<div class="bgstat' + (n ? " gold" : "") + '"><b>\u{1F381}</b><span>' + (marked === 24 ? "BLACKOUT! " + (B.blackout || 10) + " crates are yours" : n ? (B.crates || 5) + " crates are yours. A blackout makes it " + (B.blackout || 10) : "Any bingo pays " + (B.crates || 5) + " crates. A blackout pays " + (B.blackout || 10)) + '</span></div>'
       + (B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live ' + (nfl ? "games" : "game") + ' every minute.</p>'
         : '<button class="bgroll" id="bgroll"' + (bingoBusy ? " disabled" : "") + '>🎲 Re-roll my card</button><p class="note">Re-roll as often as you want until ' + (nfl ? "the first of these games kicks off" : "kickoff") + ' (' + esc(when) + '). Then it locks.</p>')
       + '<p class="note">This card runs for the game week, until Tuesday 6 AM.</p>'

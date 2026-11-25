@@ -14,7 +14,7 @@ import { DurableObject } from "cloudflare:workers";
 import { ITEMS, RARITY, FIRST_CRATE, SLOTS, SLOT_NAMES, BODY_TYPES } from "./ram.js";
 import { lockerUser } from "./auth.js";
 import { COMMON, propSquares, hitsFor, playerHits, bingos } from "./bingo.js";
-export const BINGO_CRATES = 5, BLACKOUT_CRATES = 10;   // blackout = every square on the card
+export const BINGO_CRATES = 5, BLACKOUT_CRATES = 10;   // a blackout (every square) is 10 crates total, not 10 on top
 
 export const PICK_POINTS = 10, VOTE_POINTS = 5, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50;
 // Weekly accuracy bonus (dense ranking, so ties share a place): 1st place gets a crate, 2nd and 3rd get 20 RUTS.
@@ -834,8 +834,8 @@ export class Game extends DurableObject {
       const card = JSON.parse(r.card);
       if (bingos(card, set) && this.pay(`bingo:${key}:${r.user_id}`, r.user_id, 0, `Bingo! ${name} - ${BINGO_CRATES} crates`))
         this.sql.exec("UPDATE users SET crates = crates + ? WHERE id=?", BINGO_CRATES, r.user_id);
-      if (card.every((id) => id === "free" || set.has(id)) && this.pay(`blackout:${key}:${r.user_id}`, r.user_id, 0, `BLACKOUT! ${name} - ${BLACKOUT_CRATES} crates`))
-        this.sql.exec("UPDATE users SET crates = crates + ? WHERE id=?", BLACKOUT_CRATES, r.user_id);
+      if (card.every((id) => id === "free" || set.has(id)) && this.pay(`blackout:${key}:${r.user_id}`, r.user_id, 0, `BLACKOUT! ${name} - ${BLACKOUT_CRATES} crates total`))
+        this.sql.exec("UPDATE users SET crates = crates + ? WHERE id=?", BLACKOUT_CRATES - BINGO_CRATES, r.user_id);   // tops the bingo's 5 up to 10
     }
   }
   markHits(key, ids) {
