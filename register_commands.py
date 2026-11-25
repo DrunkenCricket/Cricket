@@ -18,7 +18,7 @@ COMMANDS = [
     # ram game
     {"name": "ruts", "description": "Your RUTS, crates and the RUTS leaderboard", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose RUTS to show", "required": False}]},
-    {"name": "bingo", "description": "Your Rams Bingo card: re-roll until kickoff, it marks itself live, any bingo pays 5 crates", "type": 1, "contexts": [0]},
+    {"name": "bingo", "description": "Your Rams Bingo card: re-roll until kickoff, it marks itself live, any bingo pays 5 crates, blackout 10 more", "type": 1, "contexts": [0]},
     {"name": "locker", "description": "The Locker Room: unbox crates, shop with RUTS and dress your ram on the website", "type": 1, "contexts": [0]},
     {"name": "moments", "description": "Mods: show !flag / !TD GIFs on the website", "type": 1, "contexts": [0], "default_member_permissions": "32",
      "options": [

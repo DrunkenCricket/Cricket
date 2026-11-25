@@ -2,7 +2,7 @@
 import { ITEMS, RARITY, SLOT_NAMES, BODY_TYPES, FACES, FACE_NAMES } from "./ram.js";
 import { lockerToken, lockerUser } from "./auth.js";
 export { lockerToken, lockerUser };
-import { BINGO_CRATES, CRATE_COST, PICK_POINTS, VOTE_POINTS, PODIUM_RUTS, PROP_COST, FIGHT_STAKE, STATS, propMessage, shown } from "./game.js";
+import { BINGO_CRATES, BLACKOUT_CRATES, CRATE_COST, PICK_POINTS, VOTE_POINTS, PODIUM_RUTS, PROP_COST, FIGHT_STAKE, STATS, propMessage, shown } from "./game.js";
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
@@ -100,7 +100,7 @@ export async function gameCommand(i, env, ctx) {
       const bg = await g.bingoGame();
       const hours = bg ? Math.max(24, Math.ceil((bg.ends - Date.now()) / 3600_000)) : 24;   // good for the whole game week
       const link = `${SITE}/#bingo&t=${await lockerToken(env, uid, hours)}`;
-      return msg({ content: `🎱 **Rams Bingo**${bg ? ` (${bg.name})` : ""}: re-roll your card as often as you like until kickoff, then it locks and marks itself live from the game. **Any bingo pays ${BINGO_CRATES} crates.** This link is yours for the game week.`,
+      return msg({ content: `🎱 **Rams Bingo**${bg ? ` (${bg.name})` : ""}: re-roll your card as often as you like until kickoff, then it locks and marks itself live from the game. **Any bingo pays ${BINGO_CRATES} crates, a blackout pays ${BLACKOUT_CRATES} more.** This link is yours for the game week.`,
         components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Open my Bingo card", emoji: { name: "🎱" } }] }] }, true);
     }
 
@@ -115,7 +115,7 @@ export async function gameCommand(i, env, ctx) {
             line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/skin", "pick a skin tone (free)"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
           { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet: ${PROP_COST} RUTS to pick hits or misses, the right side wins a crate`), line("/prop cancel", "cancel a bet you posted"),
             line("/prop check", "settle finished bets now"), line("/fight", `challenge a ram: ${FIGHT_STAKE} RUTS each, winner takes all`)].join("\n") },
-          { name: "🎱 Bingo", value: line("/bingo", `your Rams Bingo card for the game week: re-roll until kickoff, it marks itself live, any bingo pays ${BINGO_CRATES} crates`) },
+          { name: "🎱 Bingo", value: line("/bingo", `your Rams Bingo card for the game week: re-roll until kickoff, it marks itself live, any bingo pays ${BINGO_CRATES} crates, a blackout ${BLACKOUT_CRATES} more`) },
           { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "field shows on the website: !TD !flag !refsplan !int !fumble !itsgood !tutu")].join("\n") },
           { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Bingo, Locker Room](${SITE})` },
         ],

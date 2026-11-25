@@ -14,7 +14,7 @@ import { DurableObject } from "cloudflare:workers";
 import { ITEMS, RARITY, FIRST_CRATE, SLOTS, SLOT_NAMES, BODY_TYPES } from "./ram.js";
 import { lockerUser } from "./auth.js";
 import { COMMON, propSquares, hitsFor, bingos } from "./bingo.js";
-export const BINGO_CRATES = 5;
+export const BINGO_CRATES = 5, BLACKOUT_CRATES = 10;   // blackout = every square on the card
 
 export const PICK_POINTS = 10, VOTE_POINTS = 5, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50;
 // Weekly accuracy bonus (dense ranking, so ties share a place): 1st place gets a crate, 2nd and 3rd get 20 RUTS.
@@ -793,7 +793,7 @@ export class Game extends DurableObject {
       return { id: r.user_id, name: shown(r.name), marked: c.filter((x) => x !== "free" && set.has(x)).length, bingos: bingos(c, set), paid: !!this.one("SELECT 1 AS x FROM ledger WHERE key=?", `bingo:${g.id}:${r.user_id}`) };
     }).sort((a, b) => b.bingos - a.bingos || b.marked - a.marked);
     const labels = Object.fromEntries(pool.map((s) => [s.id, s.label]));
-    return { game: g, locked, crates: BINGO_CRATES, state: this.meta("bingoState:" + g.id) || "pre", pool: pool.length, hits,
+    return { game: g, locked, crates: BINGO_CRATES, blackout: BLACKOUT_CRATES, state: this.meta("bingoState:" + g.id) || "pre", pool: pool.length, hits,
       card: row ? JSON.parse(row.card).map((id) => ({ id, label: id === "free" ? "FREE" : labels[id] || id })) : null, rerolls: row?.rerolls || 0, board };
   }
   /** Mark squares from the live game. Runs every minute from kickoff until the game is final. */
@@ -811,8 +811,11 @@ export class Game extends DurableObject {
     // first bingo on a card pays out once
     const set = new Set(Object.keys(old));
     for (const r of this.all("SELECT user_id, card FROM bingo WHERE event_id=?", g.id)) {
-      if (bingos(JSON.parse(r.card), set) && this.pay(`bingo:${g.id}:${r.user_id}`, r.user_id, 0, `Bingo! ${g.name} - ${BINGO_CRATES} crates`))
+      const card = JSON.parse(r.card);
+      if (bingos(card, set) && this.pay(`bingo:${g.id}:${r.user_id}`, r.user_id, 0, `Bingo! ${g.name} - ${BINGO_CRATES} crates`))
         this.sql.exec("UPDATE users SET crates = crates + ? WHERE id=?", BINGO_CRATES, r.user_id);
+      if (card.every((id) => id === "free" || set.has(id)) && this.pay(`blackout:${g.id}:${r.user_id}`, r.user_id, 0, `BLACKOUT! ${g.name} - ${BLACKOUT_CRATES} crates`))
+        this.sql.exec("UPDATE users SET crates = crates + ? WHERE id=?", BLACKOUT_CRATES, r.user_id);
     }
   }
 
