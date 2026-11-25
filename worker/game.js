@@ -13,7 +13,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { ITEMS, RARITY, FIRST_CRATE, SLOTS, SLOT_NAMES, BODY_TYPES } from "./ram.js";
 import { lockerUser } from "./auth.js";
-import { COMMON, propSquares, hitsFor, bingos } from "./bingo.js";
+import { COMMON, propSquares, hitsFor, playerHits, bingos } from "./bingo.js";
 export const BINGO_CRATES = 5, BLACKOUT_CRATES = 10;   // blackout = every square on the card
 
 export const PICK_POINTS = 10, VOTE_POINTS = 5, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50;
@@ -763,6 +763,32 @@ export class Game extends DurableObject {
     if (players.length) this.meta("bingoPool2:" + g.id, JSON.stringify(pool));   // without Sleeper, try again next time
     return pool;
   }
+  // Rest of NFL card: prop squares only, every other game in the Rams' game week. Locks at the first of those kickoffs.
+  async bingoPoolNfl(g) {
+    const key = "bingoPoolNfl:" + g.id, saved = this.meta(key);
+    if (saved) return JSON.parse(saved);
+    let pool = [], kick = null;
+    try {
+      const { proj, gameOf } = await this.sleeper();
+      const byEvent = {};
+      for (const p of proj) {
+        const ev = gameOf(p.team);
+        if (!ev || ev.id === g.id || ev.kick >= g.ends || ev.kick < g.ends - 8 * 86400_000) continue;
+        (byEvent[ev.id] ||= { ev, players: [] }).players.push(p);
+      }
+      for (const { ev, players } of Object.values(byEvent)) {
+        const posted = this.all("SELECT player, stat, line FROM props WHERE event_id=?", ev.id);
+        for (const sq of propSquares(players, posted)) {
+          const team = players.find((p) => sq.player === p.player.first_name + " " + p.player.last_name)?.team;
+          pool.push({ ...sq, label: sq.label + (team ? " (" + team + ")" : ""), event: ev.id, kick: ev.kick });
+        }
+        kick = Math.min(kick ?? ev.kick, ev.kick);
+      }
+    } catch (e) { console.log("bingo nfl sleeper", e); }
+    const out = { pool, kick: kick ?? g.kick };
+    if (pool.length >= 24) this.meta(key, JSON.stringify(out));
+    return out;
+  }
   drawCard(pool) {
     const ids = pool.map((s) => s.id);
     for (let i = ids.length - 1; i > 0; i--) { const j = rand(i + 1); [ids[i], ids[j]] = [ids[j], ids[i]]; }
@@ -770,12 +796,17 @@ export class Game extends DurableObject {
     card.splice(12, 0, "free");
     return card;
   }
-  async bingo(uid, name, op) {
+  /** kind "rams" (game + prop squares for the Rams game) or "nfl" (prop squares from every other game that week) */
+  async bingo(uid, name, op, kind = "rams") {
     const g = await this.bingoGame();
     if (!g) return { error: "No Rams game on the schedule." };
-    const pool = await this.bingoPool(g);
-    const locked = Date.now() >= g.kick;
-    let row = uid && this.one("SELECT * FROM bingo WHERE user_id=? AND event_id=?", uid, g.id);
+    const nfl = kind === "nfl";
+    let pool, lockAt;
+    if (nfl) { const p = await this.bingoPoolNfl(g); pool = p.pool; lockAt = p.kick; } else { pool = await this.bingoPool(g); lockAt = g.kick; }
+    if (pool.length < 24) return { error: nfl ? "No other games with prop lines this week yet." : "Bingo squares aren't ready yet.", kind, game: g };
+    const key = nfl ? "nfl:" + g.id : g.id;
+    const locked = Date.now() >= lockAt;
+    let row = uid && this.one("SELECT * FROM bingo WHERE user_id=? AND event_id=?", uid, key);
     const known = new Set(pool.map((s) => s.id));
     const stale = row && !locked && JSON.parse(row.card).some((id) => id !== "free" && !known.has(id));   // drawn from an older pool
     if (uid && (!row || stale || (op === "reroll" && !locked))) {
@@ -783,40 +814,64 @@ export class Game extends DurableObject {
       if (name) this.user(uid, name);
       const nm = name || this.one("SELECT name FROM users WHERE id=?", uid)?.name || "Ram";
       this.sql.exec("INSERT INTO bingo (user_id, event_id, name, card, rerolls, created) VALUES (?,?,?,?,0,?) ON CONFLICT(user_id, event_id) DO UPDATE SET card=excluded.card, rerolls=rerolls+1",
-        uid, g.id, nm, card, Date.now());
-      row = this.one("SELECT * FROM bingo WHERE user_id=? AND event_id=?", uid, g.id);
+        uid, key, nm, card, Date.now());
+      row = this.one("SELECT * FROM bingo WHERE user_id=? AND event_id=?", uid, key);
     }
-    const hits = JSON.parse(this.meta("bingoHits:" + g.id) || "{}");
+    const hits = JSON.parse(this.meta("bingoHits:" + key) || "{}");
     const set = new Set(Object.keys(hits));
-    const board = this.all("SELECT user_id, name, card FROM bingo WHERE event_id=?", g.id).map((r) => {
+    const board = this.all("SELECT user_id, name, card FROM bingo WHERE event_id=?", key).map((r) => {
       const c = JSON.parse(r.card);
-      return { id: r.user_id, name: shown(r.name), marked: c.filter((x) => x !== "free" && set.has(x)).length, bingos: bingos(c, set), paid: !!this.one("SELECT 1 AS x FROM ledger WHERE key=?", `bingo:${g.id}:${r.user_id}`) };
+      return { id: r.user_id, name: shown(r.name), marked: c.filter((x) => x !== "free" && set.has(x)).length, bingos: bingos(c, set), paid: !!this.one("SELECT 1 AS x FROM ledger WHERE key=?", `bingo:${key}:${r.user_id}`) };
     }).sort((a, b) => b.bingos - a.bingos || b.marked - a.marked);
     const labels = Object.fromEntries(pool.map((s) => [s.id, s.label]));
-    return { game: g, locked, crates: BINGO_CRATES, blackout: BLACKOUT_CRATES, state: this.meta("bingoState:" + g.id) || "pre", pool: pool.length, hits,
+    return { kind, game: g, lockAt, locked, crates: BINGO_CRATES, blackout: BLACKOUT_CRATES, state: this.meta("bingoState:" + key) || "pre", pool: pool.length, hits,
       card: row ? JSON.parse(row.card).map((id) => ({ id, label: id === "free" ? "FREE" : labels[id] || id })) : null, rerolls: row?.rerolls || 0, board };
   }
-  /** Mark squares from the live game. Runs every minute from kickoff until the game is final. */
-  async bingoUpdate() {
-    const g = JSON.parse(this.meta("bingoGame") || "null");
-    if (!g || Date.now() < g.kick - 5 * 60_000 || this.meta("bingoState:" + g.id) === "post") return;
-    if (!this.one("SELECT 1 AS x FROM bingo WHERE event_id=? LIMIT 1", g.id)) return;
-    const res = await fetch(`${ESPN}/summary?event=${g.id}`, { cf: { cacheTtl: 30 } });
-    if (!res.ok) return;
-    const { hits, state } = hitsFor(await res.json(), await this.bingoPool(g));
-    const old = JSON.parse(this.meta("bingoHits:" + g.id) || "{}");
-    for (const id of hits) old[id] ??= Date.now();
-    this.meta("bingoHits:" + g.id, JSON.stringify(old));
-    if (state) this.meta("bingoState:" + g.id, state);
-    // first bingo on a card pays out once
-    const set = new Set(Object.keys(old));
-    for (const r of this.all("SELECT user_id, card FROM bingo WHERE event_id=?", g.id)) {
+  /** First bingo and a blackout on each card pay out once. */
+  payBingos(key, name) {
+    const set = new Set(Object.keys(JSON.parse(this.meta("bingoHits:" + key) || "{}")));
+    for (const r of this.all("SELECT user_id, card FROM bingo WHERE event_id=?", key)) {
       const card = JSON.parse(r.card);
-      if (bingos(card, set) && this.pay(`bingo:${g.id}:${r.user_id}`, r.user_id, 0, `Bingo! ${g.name} - ${BINGO_CRATES} crates`))
+      if (bingos(card, set) && this.pay(`bingo:${key}:${r.user_id}`, r.user_id, 0, `Bingo! ${name} - ${BINGO_CRATES} crates`))
         this.sql.exec("UPDATE users SET crates = crates + ? WHERE id=?", BINGO_CRATES, r.user_id);
-      if (card.every((id) => id === "free" || set.has(id)) && this.pay(`blackout:${g.id}:${r.user_id}`, r.user_id, 0, `BLACKOUT! ${g.name} - ${BLACKOUT_CRATES} crates`))
+      if (card.every((id) => id === "free" || set.has(id)) && this.pay(`blackout:${key}:${r.user_id}`, r.user_id, 0, `BLACKOUT! ${name} - ${BLACKOUT_CRATES} crates`))
         this.sql.exec("UPDATE users SET crates = crates + ? WHERE id=?", BLACKOUT_CRATES, r.user_id);
     }
+  }
+  markHits(key, ids) {
+    const old = JSON.parse(this.meta("bingoHits:" + key) || "{}");
+    for (const id of ids) old[id] ??= Date.now();
+    this.meta("bingoHits:" + key, JSON.stringify(old));
+  }
+  /** Mark squares from live games. Runs every minute; each game is checked from kickoff until it's final. */
+  async bingoUpdate() {
+    const g = JSON.parse(this.meta("bingoGame") || "null");
+    if (!g) return;
+    // Rams card
+    if (Date.now() >= g.kick - 5 * 60_000 && this.meta("bingoState:" + g.id) !== "post" && this.one("SELECT 1 AS x FROM bingo WHERE event_id=? LIMIT 1", g.id)) {
+      const res = await fetch(`${ESPN}/summary?event=${g.id}`, { cf: { cacheTtl: 30 } });
+      if (res.ok) {
+        const { hits, state } = hitsFor(await res.json(), await this.bingoPool(g));
+        this.markHits(g.id, hits);
+        if (state) this.meta("bingoState:" + g.id, state);
+        this.payBingos(g.id, g.name);
+      }
+    }
+    // Rest of NFL card: one box score per game that has started and isn't final yet
+    const key = "nfl:" + g.id, saved = this.meta("bingoPoolNfl:" + g.id);
+    if (!saved || !this.one("SELECT 1 AS x FROM bingo WHERE event_id=? LIMIT 1", key)) return;
+    const { pool } = JSON.parse(saved), byEvent = {};
+    for (const s of pool) (byEvent[s.event] ||= []).push(s);
+    let changed = false;
+    for (const [ev, squares] of Object.entries(byEvent)) {
+      if (Date.now() < squares[0].kick - 5 * 60_000 || this.meta("bingoState:" + ev) === "post") continue;
+      const res = await fetch(`${ESPN}/summary?event=${ev}`, { cf: { cacheTtl: 30 } });
+      if (!res.ok) continue;
+      const { hits, state } = playerHits(await res.json(), squares);
+      this.markHits(key, hits); changed = true;
+      if (state) this.meta("bingoState:" + ev, state);
+    }
+    if (changed) this.payBingos(key, "Rest of NFL bingo");
   }
 
   // ---------- read models ----------

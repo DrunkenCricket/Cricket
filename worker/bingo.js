@@ -198,6 +198,11 @@ const playerHit = (G, s) => s.stat === "any_td"
   ? pstat(G.players, s.player, "rush_td") + pstat(G.players, s.player, "rec_td") >= s.line
   : pstat(G.players, s.player, s.stat) >= s.line;
 
+/** Player squares hit in one game's box score (Rest of NFL cards). */
+export function playerHits(sum, squares) {
+  const G = { players: sum.boxscore?.players || [] };
+  return { hits: squares.filter((s) => { try { return playerHit(G, s); } catch { return false; } }).map((s) => s.id), state: sum.header?.competitions?.[0]?.status?.type?.state };
+}
 /** Which pool square ids are hit right now. */
 export function hitsFor(sum, pool) {
   const G = gameView(sum), out = [];

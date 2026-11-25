@@ -320,7 +320,8 @@ export async function handleSite(request, env, ctx) {
     let body = {};
     if (request.method === "POST") { try { body = await request.json(); } catch {} }
     const uid = body.t ? await lockerUser(env, body.t) : null;
-    try { return json({ ...(await env.GAME.get(env.GAME.idFromName("main")).bingo(uid, null, body.op)), me: uid, expired: !!body.t && !uid }, 0); }
+    const kind = (body.kind || new URL(request.url).searchParams.get("kind")) === "nfl" ? "nfl" : "rams";
+    try { return json({ ...(await env.GAME.get(env.GAME.idFromName("main")).bingo(uid, null, body.op, kind)), me: uid, expired: !!body.t && !uid }, 0); }
     catch (e) { return json({ error: String(e.message || e) }, 0); }
   }
   if (pathname === "/robots.txt") return new Response("User-agent: *\nDisallow: /lockeroom\nDisallow: /lockerroom\nDisallow: /locker\n", { headers: { "Content-Type": "text/plain" } });
@@ -847,6 +848,8 @@ td.n{font-variant-numeric:tabular-nums}
 .fight:hover{border-color:var(--gold)}.fight b{color:var(--gold)}.fight.expired,.fight.declined,.fight.cancelled{opacity:.55}.fight u{color:var(--gold)}
 h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacing:1px;margin:26px 0 10px}
 .pasture{height:560px}
+.bgtabs{display:flex;gap:8px;margin:0 0 14px}.bgtabs button{background:#0f1733;color:#fff;border:1px solid #23305e;border-radius:12px;padding:9px 16px;font:inherit;font-weight:800;cursor:pointer}
+.bgtabs button.on{background:#ffc82c;color:#15172b;border-color:#ffc82c}
 .bgwrap{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
 .bgcard{flex:1 1 520px;max-width:640px;background:#003594;border:3px solid #ffc82c;border-radius:18px;padding:10px;box-shadow:0 10px 30px #0008}
 .bghead{display:grid;grid-template-columns:repeat(5,1fr);text-align:center;margin-bottom:8px}
@@ -1408,24 +1411,29 @@ function betsView() {
 }
 
 // ---------- Rams Bingo ----------
-let bingo = null, bingoBusy = false;
+// two cards: the Rams game, and props-only from the rest of the NFL that week
+let bingoKind = "rams", bingo = null, bingoBusy = false;
+const bingoCache = {};
 function loadBingo(op) {
-  const key = myKey();
+  const key = myKey(), kind = bingoKind;
   bingoBusy = true;
-  return fetch("/api/bingo", { method: key ? "POST" : "GET", headers: key ? { "Content-Type": "application/json" } : {}, body: key ? JSON.stringify({ t: key, op }) : undefined })
-    .then((r) => r.json()).then((d) => { bingo = d; bingoBusy = false; if (tab === "bingo") bingoView(); })
-    .catch(() => { bingoBusy = false; if (!bingo) bingo = { error: "Couldn't load Bingo. Refresh to try again." }; if (tab === "bingo") bingoView(); });
+  return fetch("/api/bingo?kind=" + kind, { method: key ? "POST" : "GET", headers: key ? { "Content-Type": "application/json" } : {}, body: key ? JSON.stringify({ t: key, op, kind }) : undefined })
+    .then((r) => r.json()).then((d) => { bingoCache[kind] = d; bingoBusy = false; if (kind === bingoKind) { bingo = d; if (tab === "bingo") bingoView(); } })
+    .catch(() => { bingoBusy = false; if (!bingoCache[kind]) bingoCache[kind] = { error: "Couldn't load Bingo. Refresh to try again." }; if (kind === bingoKind) { bingo = bingoCache[kind]; if (tab === "bingo") bingoView(); } });
 }
 setInterval(() => { if (tab === "bingo" && !document.hidden && bingo && bingo.locked) loadBingo(); }, 30000);
 const BLINES = [[0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23,24],[0,5,10,15,20],[1,6,11,16,21],[2,7,12,17,22],[3,8,13,18,23],[4,9,14,19,24],[0,6,12,18,24],[4,8,12,16,20]];
 function bingoView() {
-  sub.textContent = "Rams Bingo";
-  if (!bingo) { view.innerHTML = '<div class="empty">Shuffling cards...</div>'; loadBingo(); return; }
-  if (bingo.error) { view.innerHTML = '<div class="empty">' + esc(bingo.error) + '</div>'; return; }
+  const nfl = bingoKind === "nfl";
+  sub.textContent = nfl ? "Rest of NFL Bingo" : "Rams Bingo";
+  const tabs = '<div class="bgtabs"><button data-k="rams" class="' + (nfl ? "" : "on") + '">🐏 Rams card</button><button data-k="nfl" class="' + (nfl ? "on" : "") + '">🏈 Rest of NFL card</button></div>';
+  const wire = () => view.querySelectorAll("[data-k]").forEach((b) => b.onclick = () => { bingoKind = b.dataset.k; bingo = bingoCache[bingoKind] || null; bingoView(); });
+  if (!bingo) { view.innerHTML = tabs + '<div class="empty">Shuffling cards...</div>'; wire(); loadBingo(); return; }
+  if (bingo.error) { view.innerHTML = tabs + '<div class="empty">' + esc(bingo.error) + '</div>'; wire(); return; }
   const B = bingo, g = B.game, hits = B.hits || {};
-  const kick = new Date(g.kick), when = kick.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  sub.textContent = "Rams Bingo · " + g.name;
-  let html = '';
+  const kick = new Date(B.lockAt || g.kick), when = kick.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  sub.textContent = nfl ? "Rest of NFL Bingo · prop bets from every other game this week" : "Rams Bingo · " + g.name;
+  let html = tabs;
   if (B.card) {
     const on = (i) => B.card[i].id === "free" || !!hits[B.card[i].id];
     const win = new Set(); let n = 0;
@@ -1436,8 +1444,8 @@ function bingoView() {
       + '</div></div><div class="bgside">'
       + '<div class="bgstat"><b>' + marked + '<small>/24</small></b><span>marked</span></div><div class="bgstat' + (n ? " gold" : "") + '"><b>' + n + '</b><span>' + (n === 1 ? "BINGO!" : n ? "BINGOS!" : "bingos") + '</span></div>'
       + '<div class="bgstat' + (n ? " gold" : "") + '"><b>\u{1F381}</b><span>' + (marked === 24 ? "BLACKOUT! " + ((B.crates || 5) + (B.blackout || 10)) + " crates are yours" : n ? (B.crates || 5) + " crates are yours. Blackout adds " + (B.blackout || 10) + " more" : "Any bingo pays " + (B.crates || 5) + " crates. Blackout pays " + (B.blackout || 10)) + '</span></div>'
-      + (B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live game every minute.</p>'
-        : '<button class="bgroll" id="bgroll"' + (bingoBusy ? " disabled" : "") + '>🎲 Re-roll my card</button><p class="note">Re-roll as often as you want until kickoff (' + esc(when) + '). Then it locks.</p>')
+      + (B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live ' + (nfl ? "games" : "game") + ' every minute.</p>'
+        : '<button class="bgroll" id="bgroll"' + (bingoBusy ? " disabled" : "") + '>🎲 Re-roll my card</button><p class="note">Re-roll as often as you want until ' + (nfl ? "the first of these games kicks off" : "kickoff") + ' (' + esc(when) + '). Then it locks.</p>')
       + '<p class="note">This card runs for the game week, until Tuesday 6 AM.</p>'
       + '</div></div>';
   } else {
@@ -1447,7 +1455,7 @@ function bingoView() {
   html += '<h3 class="past">Cards in play (' + board.length + ')</h3>' + (board.length ? '<table><thead><tr><th>#</th><th>Player</th><th>Marked</th><th>Bingos</th></tr></thead><tbody>'
     + board.map((r, i) => '<tr' + (r.id === B.me ? ' class="mine"' : "") + '><td class="n">' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td class="n">' + r.marked + '/24</td><td class="n">' + (r.bingos ? "\u{1F3B1} " + r.bingos + (r.paid ? " \u00b7 \u{1F381}" : ""): "0") + '</td></tr>').join("")
     + '</tbody></table>' : '<div class="empty">Nobody has a card yet.</div>');
-  view.innerHTML = html;
+  view.innerHTML = html; wire();
   const rb = document.getElementById("bgroll");
   if (rb) rb.onclick = () => { rb.disabled = true; loadBingo("reroll"); };
 }
