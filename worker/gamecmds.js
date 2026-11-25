@@ -115,11 +115,11 @@ export async function gameCommand(i, env, ctx) {
           { name: "💰 RUTS", value: [line("/ruts", "your RUTS, crates and the top 10"), `Every pick'em vote = **${VOTE_POINTS} RUTS**, right picks **+${PICK_POINTS}** more. Weekly: most correct wins a **crate**, 2nd and 3rd get **${PODIUM_RUTS} RUTS** (ties share).`].join("\n") },
           { name: "🐏 Your ram", value: [line("/crate", `open a crate (first is free, then ${CRATE_COST} RUTS)`), line("/locker", "the website locker: unbox, shop and dress your ram"),
             line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/skin", "pick a skin tone (free)"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
-          { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet: ${PROP_COST} RUTS to pick hits or misses, the right side wins a crate`), line("/prop cancel", "cancel a bet you posted"),
+          { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet: ${PROP_COST} RUTS to pick hits or misses, the right side wins a crate (on the website, stack up to 10x: a crate per ${PROP_COST} RUTS)`), line("/prop cancel", "cancel a bet you posted"),
             line("/prop check", "settle finished bets now"), line("/fight", `challenge a ram: ${FIGHT_STAKE} RUTS each, winner takes all`)].join("\n") },
           { name: "🎱 Bingo", value: line("/bingo", `your Rams Bingo card for the game week: re-roll until kickoff, it marks itself live, any bingo pays ${BINGO_CRATES} crates, a blackout ${BLACKOUT_CRATES}`) },
           { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "field shows on the website: !TD !flag !refsplan !int !fumble !itsgood !tutu")].join("\n") },
-          { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Bingo, Locker Room](${SITE})` },
+          { name: "🌐 Website", value: `[Herd, Locker Room, Pick'em, Bingo, Bets & Fights](${SITE})` },
         ],
       }] });
     }

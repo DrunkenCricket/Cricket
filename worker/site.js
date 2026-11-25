@@ -7,7 +7,7 @@
 
 import { renderRam, ITEMS, SLOT_NAMES, RARITY, BODY_TYPES, DEFAULT_LOOK, FACES, FACE_NAMES } from "./ram.js";
 import { lockerUser } from "./gamecmds.js";
-import { CRATE_COST } from "./game.js";
+import { CRATE_COST, PROP_COST, MAX_UNITS, propMessage } from "./game.js";
 
 const RAW = "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/";
 const APP_ID = "1574684181361852416";
@@ -322,6 +322,19 @@ async function betsData(env, ctx) {
 export async function handleSite(request, env, ctx) {
   const { pathname } = new URL(request.url);
   if (pathname === "/api/locker" && request.method === "POST" && env.GAME) return lockerApi(request, env);
+  if (pathname === "/api/bet" && request.method === "POST" && env.GAME) {   // take a side on a bet from the website
+    let body = {};
+    try { body = await request.json(); } catch {}
+    const uid = await lockerUser(env, body.t);
+    if (!uid) return json({ error: "Your key expired. Run /locker or /bingo in Discord to get a new link." }, 0);
+    const g = env.GAME.get(env.GAME.idFromName("main"));
+    const r = await g.enter(Number(body.id), uid, null, body.side === "no" ? "no" : "yes", body.units);
+    if (r.error) return json({ error: r.error.replace(/\*\*/g, "") }, 0);
+    if (r.prop.channel_id && r.prop.message_id)   // keep the Discord post's counts in sync
+      ctx.waitUntil(fetch(`https://discord.com/api/v10/channels/${r.prop.channel_id}/messages/${r.prop.message_id}`, { method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` }, body: JSON.stringify(propMessage(r.prop, r.count)) }).catch(() => {}));
+    return json({ ok: true, count: r.count, points: r.user?.points }, 0);
+  }
   if (pathname === "/api/bingo" && env.GAME) {   // POST with a key: your card (+ re-roll); GET: the scoreboard only
     let body = {};
     if (request.method === "POST") { try { body = await request.json(); } catch {} }
@@ -411,7 +424,7 @@ const TOPBAR_CSS = `.tb{background:linear-gradient(135deg,#003594,#001a4d);paddi
 .tb nav a{white-space:nowrap;flex:0 0 auto;color:#c9d3ea;font-weight:600;padding:10px 16px;text-decoration:none;border-radius:10px 10px 0 0}.tb nav a:hover{color:#ffa300}
 .tb nav a.on{background:var(--bg);color:#ffa300}@media (max-width:560px){.tb .t{font-size:22px}.tb nav a{padding:10px}}`;
 const TOPBAR = (on) => `<header class="tb"><div class="w"><div class="t">RAMS <span>PICK'EM</span></div><nav>`
-  + [["/#week", "Pick'em"], ["/#table", "Standings"], ["/#bets", "Bets &amp; Fights"], ["/#herd", "Herd"], ["/#bingo", "Bingo"], ["/locker", "Locker Room"]]
+  + [["/#herd", "Herd"], ["/locker", "Locker Room"], ["/#week", "Pick'em"], ["/#bingo", "Bingo"], ["/#bets", "Bets &amp; Fights"]]
     .map(([h, l]) => `<a href="${h}"${h === on ? ' class="on"' : ""}>${l}</a>`).join("") + `</nav></div></header>`;
 
 // ---------- The Locker Room scene (1000 x 470): lockers with gear on the left, the shower in the back right ----------
@@ -821,7 +834,14 @@ nav button{background:none;border:0;color:#c9d3ea;font:inherit;font-weight:600;p
 nav button.on{background:var(--bg);color:var(--gold)}
 nav .navlink{color:#c9d3ea;font-weight:600;padding:10px 16px;text-decoration:none;border-radius:10px 10px 0 0}nav .navlink:hover{color:var(--gold)}
 main{padding:20px 16px 48px}
-.wksel{display:flex;align-items:center;gap:10px;margin:0 0 14px}.wksel label{color:var(--muted);font-weight:700}
+.stake{display:flex;align-items:center;gap:10px;margin-top:10px}.stake span{flex:1;text-align:center;font-size:14px}.stake b{color:var(--gold)}
+.stake button{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:20px;font-weight:900;cursor:pointer;line-height:1}.stake button:disabled{opacity:.35;cursor:default}
+.betbtns{display:flex;gap:8px;margin-top:8px}.betbtns button{flex:1;border:0;border-radius:10px;padding:9px 8px;font:inherit;font-weight:800;cursor:pointer;background:#1f3a2a;color:#7ee2a8}
+.betbtns button[data-side="no"]{background:#3a1f22;color:#ff9a9a}.betbtns button:disabled{opacity:.5}.betme{margin-top:10px;font-size:14px}.beterr{color:#ff8080;font-size:13px;margin-top:6px}
+.pkbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px}
+.seg{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:3px}
+.seg button{background:none;border:0;color:var(--muted);font:inherit;font-weight:800;padding:7px 14px;border-radius:9px;cursor:pointer}.seg button.on{background:var(--gold);color:#111}
+.wksel{display:flex;align-items:center;gap:10px}.wksel label{color:var(--muted);font-weight:700}
 .wksel select{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:inherit;font-weight:700}
 .note{color:var(--muted);margin:0 0 16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
@@ -956,14 +976,14 @@ ${FIELD_CSS}
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="week" class="on">Pick'em</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><button data-t="bingo">Bingo</button><a class="navlink" href="/locker">Locker Room</a></nav>
+<nav><button data-t="herd" class="on">Herd</button><a class="navlink" href="/locker">Locker Room</a><button data-t="week">Pick'em</button><button data-t="bingo">Bingo</button><button data-t="bets">Bets &amp; Fights</button></nav>
 </div></header>
 <template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const view = document.getElementById("view"), sub = document.getElementById("sub");
-let pickWeek = "now", week = null, hist = null, herd = null, bets = null, fights = [], tab = "week", raf = 0;
+let pickWeek = "now", week = null, hist = null, herd = null, bets = null, fights = [], tab = "herd", raf = 0;
 const when = (iso) => new Date(iso).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"});
 
 function faces(users) {
@@ -1396,19 +1416,43 @@ function pasture() {
 }
 
 // Bets: every open prop bet, who's in, and how the last week's bets went.
+// take a side right here (same 20 RUTS as the Discord buttons); needs this browser's key from /locker or /bingo
+function betButtons(b) {
+  if (b.status !== "open" || b.closes <= Date.now()) return "";
+  const me = myId(), mine = me && b.users.find((u) => u.id === me);
+  if (mine) return '<div class="betme">You took <b>' + (mine.side === "no" ? "❌ It misses" : "✅ It hits") + '</b>' + (mine.units > 1 ? " · " + mine.units * ${PROP_COST} + " RUTS for " + mine.units + " crates" : "") + '</div>';
+  if (!me) return '<div class="betme dim">Run /locker in Discord once to bet from here.</div>';
+  const u = betUnits[b.id] || 1;
+  return '<div class="stake"><button data-units="' + b.id + '" data-d="-1"' + (u <= 1 ? " disabled" : "") + '>−</button><span><b>' + u * ${PROP_COST} + ' RUTS</b> · wins ' + u + (u === 1 ? " crate" : " crates") + '</span><button data-units="' + b.id + '" data-d="1"' + (u >= ${MAX_UNITS} ? " disabled" : "") + '>+</button></div>'
+    + '<div class="betbtns"><button data-bet="' + b.id + '" data-side="yes">✅ It hits</button><button data-bet="' + b.id + '" data-side="no">❌ It misses</button></div><div class="beterr" id="be' + b.id + '"></div>';
+}
+const betUnits = {};
+function wireBets() {
+  view.querySelectorAll("[data-units]").forEach((btn) => btn.onclick = () => { const id = btn.dataset.units; betUnits[id] = Math.max(1, Math.min(${MAX_UNITS}, (betUnits[id] || 1) + Number(btn.dataset.d))); render(); });
+  view.querySelectorAll("[data-bet]").forEach((btn) => btn.onclick = () => {
+    const id = btn.dataset.bet;
+    view.querySelectorAll('[data-bet="' + id + '"]').forEach((x) => { x.disabled = true; });
+    fetch("/api/bet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ t: myKey(), id, side: btn.dataset.side, units: betUnits[id] || 1 }) })
+      .then((r) => r.json()).then((d) => {
+        if (d.error) { document.getElementById("be" + id).textContent = d.error; view.querySelectorAll('[data-bet="' + id + '"]').forEach((x) => { x.disabled = false; }); return; }
+        return fetch("/api/bets").then((r) => r.json()).then((x) => { bets = x.bets; fights = x.fights || []; if (tab === "bets") render(); });
+      }).catch(() => { document.getElementById("be" + id).textContent = "Couldn't reach the bot. Try again."; });
+  });
+}
 function betsView() {
   if (!bets) { view.innerHTML = '<div class="empty">Loading bets...</div>'; return; }
   const open = bets.filter((b) => b.status === "open");
-  sub.textContent = open.length + " open bet" + (open.length === 1 ? "" : "s") + " · 20 RUTS to pick a side, the right side wins a crate";
-  if (!bets.length && !fights.length) { view.innerHTML = '<div class="empty">No bets yet. Post one in Discord with /prop random or /prop auto.</div>'; return; }
-  const sideRow = (label, us, won) => '<div class="srow"><div class="count">' + label + " · " + us.length + (won && us.length ? " · each won a crate" : "") + "</div>" + (us.length ? faces(us) : "") + "</div>";
+  sub.textContent = open.length + " open bet" + (open.length === 1 ? "" : "s") + " · every 20 RUTS on the right side wins a crate";
+  if (!bets.length && !fights.length) { view.innerHTML = '<div class="empty">No bets yet. Post one in Discord with /bet.</div>'; return; }
+  const sideRow = (label, us, won) => '<div class="srow"><div class="count">' + label + " · " + us.length + (won && us.length ? " · won a crate per 20 RUTS" : "") + "</div>" + (us.length ? faces(us) : "") + "</div>";
   const left = (t) => { const m = Math.round((t - Date.now()) / 60000); return m <= 0 ? "closed" : m < 60 ? m + "m left" : m < 1440 ? Math.round(m / 60) + "h left" : Math.round(m / 1440) + "d left"; };
   const card = (b) => {
     const st = b.status === "open" ? (b.closes > Date.now() ? '<span class="lock">Closes ' + when(new Date(b.closes)) + " · " + left(b.closes) + "</span>" : "Live · entries closed")
       : b.status === "hit" ? '<span class="rhit">HIT · ' + b.value + " " + esc(b.label) + "</span>" : b.status === "miss" ? '<span class="rmiss">Missed · ' + b.value + "</span>" : "Cancelled";
     return '<div class="game bet ' + b.status + '"><div class="meta"><span>Bet #' + b.id + " · " + esc(b.game) + "</span><span>" + st + "</span></div>"
       + '<div class="bt">' + esc(b.player) + " gets <b>" + b.line + "+</b> " + esc(b.label) + "</div>"
-      + sideRow("✅ Hits", b.users.filter((u) => u.side !== "no"), b.status === "hit") + sideRow("❌ Misses", b.users.filter((u) => u.side === "no"), b.status === "miss") + "</div>";
+      + sideRow("✅ Hits", b.users.filter((u) => u.side !== "no"), b.status === "hit") + sideRow("❌ Misses", b.users.filter((u) => u.side === "no"), b.status === "miss")
+      + betButtons(b) + "</div>";
   };
   const done = bets.filter((b) => b.status !== "open");
   const fightRow = (f) => {
@@ -1419,8 +1463,9 @@ function betsView() {
       + (f.status === "done" ? ' · <u>Watch</u>' : "") + "</span></a>";
   };
   const fightsHtml = fights.length ? '<h3 class="past">Ram fights</h3><div class="fights">' + fights.map(fightRow).join("") + "</div>" : "";
-  view.innerHTML = (open.length ? '<p class="note">Take a bet with its button in Discord. Results settle live from the box score.</p><div class="grid">' + open.map(card).join("") + "</div>" : '<div class="empty">No open bets right now.</div>')
+  view.innerHTML = (open.length ? '<p class="note">Pick a side here or with the buttons in Discord. Results settle live from the box score.</p><div class="grid">' + open.map(card).join("") + "</div>" : '<div class="empty">No open bets right now.</div>')
     + (done.length ? '<h3 class="past">Last 7 days</h3><div class="grid">' + done.map(card).join("") + "</div>" : "") + fightsHtml;
+  wireBets();
 }
 
 // ---------- Rams Bingo ----------
@@ -1497,19 +1542,22 @@ function bingoView() {
 function render() {
   cancelAnimationFrame(raf);
   if (tab !== "herd") herdHandler = null;
-  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === (tab === "last" ? "week" : tab)));
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === (["last", "table"].includes(tab) ? "week" : tab)));
   { const on = document.querySelector("nav button.on"); if (on) on.parentNode.scrollLeft = Math.max(0, on.offsetLeft - 40); }
   if (tab === "herd") { pasture(); if (!live) pollLive(); return; }
   if (tab === "bets") { betsView(); return; }
   if (tab === "bingo") { bingoView(); return; }
+  const seg = '<div class="seg"><button data-pk="week" class="' + (tab === "table" ? "" : "on") + '">Picks</button><button data-pk="table" class="' + (tab === "table" ? "on" : "") + '">Standings</button></div>';
+  const wireSeg = () => view.querySelectorAll("[data-pk]").forEach((b) => b.onclick = () => { tab = b.dataset.pk; history.replaceState(null, "", "#" + tab); render(); });
   if (tab === "week" || tab === "last") {
     // Pick'em: this week's live polls, or any graded week from the selector
     if (!week && !hist) return;
-    const past = ((hist && hist.weeks) || []).slice().reverse().filter((w) => !week || w.label !== week.label);
+    const graded = (hist && (hist.weeks || (hist.label ? [{ label: hist.label, games: hist.games }] : []))) || [];
+    const past = graded.slice().reverse().filter((w) => !week || w.label !== week.label);
     if (tab === "last" && pickWeek === "now" && past[0]) pickWeek = past[0].label;
     const opts = '<option value="now"' + (pickWeek === "now" ? " selected" : "") + '>This week' + (week && week.label ? " · " + esc(week.label) : "") + '</option>'
       + past.map((w) => '<option value="' + esc(w.label) + '"' + (pickWeek === w.label ? " selected" : "") + '>' + esc(w.label) + ' · results</option>').join("");
-    const sel = '<div class="wksel"><label for="wk">Week</label><select id="wk">' + opts + '</select></div>';
+    const sel = '<div class="pkbar">' + seg + '<div class="wksel"><label for="wk">Week</label><select id="wk">' + opts + '</select></div></div>';
     let body;
     if (pickWeek === "now") {
       sub.textContent = ((week && week.label) || "This week") + " · live picks from Discord";
@@ -1522,16 +1570,17 @@ function render() {
       sub.textContent = w.label + " · results";
       body = w.games.length ? '<div class="grid">' + w.games.map((g) => card(g, g.winner)).join("") + '</div>' : '<div class="empty">Nothing graded for this week.</div>';
     }
-    view.innerHTML = sel + body;
+    view.innerHTML = sel + body; wireSeg();
     document.getElementById("wk").onchange = (e) => { pickWeek = e.target.value; tab = "week"; render(); };
   } else {
     if (!hist) return;
     sub.textContent = (hist.season || "") + " season standings";
-    view.innerHTML = '<table><thead><tr><th>#</th><th>Picker</th><th>W-L</th><th>Win %</th></tr></thead><tbody>'
+    view.innerHTML = '<div class="pkbar">' + seg + '</div><table><thead><tr><th>#</th><th>Picker</th><th>W-L</th><th>Win %</th></tr></thead><tbody>'
       + hist.standings.map((p, i) => { const pct = p.w + p.l ? Math.round(100 * p.w / (p.w + p.l)) : 0;
         return '<tr><td class="n">' + (i + 1) + '</td><td><div class="who"><img src="' + esc(p.avatar) + '" alt="">' + esc(p.name) + '</div></td>'
           + '<td class="n">' + p.w + '-' + p.l + '</td><td><div class="pct"><span style="width:' + pct + 'px"></span>' + pct + '%</div></td></tr>'; }).join("")
       + '</tbody></table>';
+    wireSeg();
   }
 }
 document.querySelectorAll("nav button").forEach((b) => b.onclick = () => { tab = b.dataset.t; history.replaceState(null, "", "#" + tab); render(); });

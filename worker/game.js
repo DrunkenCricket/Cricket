@@ -16,7 +16,7 @@ import { lockerUser } from "./auth.js";
 import { COMMON, propSquares, hitsFor, playerHits, bingos } from "./bingo.js";
 export const BINGO_CRATES = 5, BLACKOUT_CRATES = 10;   // a blackout (every square) is 10 crates total, not 10 on top
 
-export const PICK_POINTS = 10, VOTE_POINTS = 5, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50;
+export const PICK_POINTS = 10, VOTE_POINTS = 5, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50, MAX_UNITS = 10;
 // Weekly accuracy bonus (dense ranking, so ties share a place): 1st place gets a crate, 2nd and 3rd get 20 RUTS.
 export const PODIUM_RUTS = 20;
 const STATE_URL = "https://raw.githubusercontent.com/DrunkenCricket/Cricket/main/state/pickem.json";
@@ -106,6 +106,7 @@ export class Game extends DurableObject {
     try { this.sql.exec("ALTER TABLE entries ADD COLUMN side TEXT DEFAULT 'yes'"); } catch {}   // yes = it hits, no = it misses
     try { this.sql.exec("ALTER TABLE fights ADD COLUMN token TEXT"); } catch {}       // to close the challenge message when it expires
     try { this.sql.exec("ALTER TABLE fights ADD COLUMN msg_id TEXT"); } catch {}
+    try { this.sql.exec("ALTER TABLE entries ADD COLUMN units INTEGER DEFAULT 1"); } catch {}   // stake: units x PROP_COST RUTS, wins units crates
     this.sql.exec("CREATE TABLE IF NOT EXISTS bingo (user_id TEXT, event_id TEXT, name TEXT, card TEXT, rerolls INTEGER DEFAULT 0, created INTEGER, PRIMARY KEY (user_id, event_id))");   // who posted each bet (older bets: null)
   }
 
@@ -542,16 +543,18 @@ export class Game extends DurableObject {
   }
 
   /** Take a side: "yes" = they hit the line, "no" = they don't. 20 RUTS either way; the right side wins a crate. */
-  enter(propId, uid, name, side = "yes") {
+  enter(propId, uid, name, side = "yes", units = 1) {
+    units = Math.max(1, Math.min(MAX_UNITS, Math.floor(Number(units) || 1)));
+    const cost = units * PROP_COST;
     const p = this.one("SELECT * FROM props WHERE id=?", propId);
     if (!p) return { error: "That bet is gone." };
     if (p.status !== "open" || Date.now() > p.closes) return { error: "This bet is closed." };
     const mine = this.one("SELECT side FROM entries WHERE prop_id=? AND user_id=?", propId, uid);
     if (mine) return { error: `You're already in on this one (${mine.side === "no" ? "against" : "for"} it).` };
     const u = this.user(uid, name);
-    if (u.points < PROP_COST) return { error: `Entry is **${PROP_COST} RUTS**. You have **${u.points}**.` };
-    this.sql.exec("INSERT INTO entries (prop_id,user_id,ts,side) VALUES (?,?,?,?)", propId, uid, Date.now(), side);
-    this.pay(`prop:${propId}:${uid}`, uid, -PROP_COST, `Bet #${propId} (${side === "no" ? "against" : "for"})`);
+    if (u.points < cost) return { error: `That's **${cost} RUTS**. You have **${u.points}**.` };
+    this.sql.exec("INSERT INTO entries (prop_id,user_id,ts,side,units) VALUES (?,?,?,?,?)", propId, uid, Date.now(), side, units);
+    this.pay(`prop:${propId}:${uid}`, uid, -cost, `Bet #${propId} (${side === "no" ? "against" : "for"}${units > 1 ? `, ${units}x` : ""})`);
     return { prop: p, count: this.count(propId), user: this.one("SELECT * FROM users WHERE id=?", uid) };
   }
 
@@ -563,11 +566,11 @@ export class Game extends DurableObject {
   /** Returns the winners: the "yes" side on a hit, the "no" side on a miss. */
   settle(p, hit, value) {
     this.sql.exec("UPDATE props SET status=?, value=? WHERE id=?", hit ? "hit" : "miss", value, p.id);
-    const winners = this.all("SELECT user_id FROM entries WHERE prop_id=? AND COALESCE(side,'yes')=?", p.id, hit ? "yes" : "no").map((r) => r.user_id);
-    for (const uid of winners) {
-      if (this.pay(`propwin:${p.id}:${uid}`, uid, 0, `Won bet #${p.id} (${hit ? "for" : "against"}): a crate`)) this.sql.exec("UPDATE users SET crates = crates + 1 WHERE id=?", uid);
+    const rows = this.all("SELECT user_id, COALESCE(units,1) AS units FROM entries WHERE prop_id=? AND COALESCE(side,'yes')=?", p.id, hit ? "yes" : "no");
+    for (const { user_id: uid, units } of rows) {   // one crate per 20 RUTS staked
+      if (this.pay(`propwin:${p.id}:${uid}`, uid, 0, `Won bet #${p.id} (${hit ? "for" : "against"}): ${units > 1 ? units + " crates" : "a crate"}`)) this.sql.exec("UPDATE users SET crates = crates + ? WHERE id=?", units, uid);
     }
-    return winners;
+    return rows.map((r) => r.user_id);
   }
 
   /** Anyone can post bets, one per minute each, so the channel doesn't flood. */
@@ -583,8 +586,8 @@ export class Game extends DurableObject {
     if (!p || p.status === "hit" || p.status === "miss") return { error: "Can't cancel that one." };
     if (!isMod && p.created_by !== uid) return { error: "Only whoever posted this bet (or a mod) can cancel it." };
     this.sql.exec("UPDATE props SET status='cancelled' WHERE id=?", propId);
-    const players = this.all("SELECT user_id FROM entries WHERE prop_id=?", propId).map((r) => r.user_id);
-    for (const uid of players) this.pay(`refund:${propId}:${uid}`, uid, PROP_COST, `Bet #${propId} cancelled`);
+    const rows = this.all("SELECT user_id, COALESCE(units,1) AS units FROM entries WHERE prop_id=?", propId), players = rows.map((r) => r.user_id);
+    for (const r of rows) this.pay(`refund:${propId}:${r.user_id}`, r.user_id, PROP_COST * r.units, `Bet #${propId} cancelled`);
     return { prop: { ...p, status: "cancelled" }, players };
   }
 
@@ -618,7 +621,7 @@ export class Game extends DurableObject {
       const what = p.status === "hit" ? `**${shown(p.player)}** hit ${p.line}+ ${STATS[p.stat][2]}!` : `**${shown(p.player)}** fell short with ${p.value} ${STATS[p.stat][2]}. The faders win!`;
       await fetch(`https://discord.com/api/v10/channels/${p.channel_id}/messages`, {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bot ${this.env.DISCORD_BOT_TOKEN}` },
-        body: JSON.stringify({ content: `🎉 ${what} ${players.map((u) => `<@${u}>`).join(" ")} each won a crate!`,
+        body: JSON.stringify({ content: `🎉 ${what} ${players.map((u) => `<@${u}>`).join(" ")} won! One crate per ${PROP_COST} RUTS they put in.`,
           components: [{ type: 1, components: [{ type: 2, style: 3, custom_id: "opencrate", label: "Open my crate", emoji: { name: "📦" } }] }],
           allowed_mentions: { users: players.slice(0, 100) } }),
       });
@@ -897,7 +900,7 @@ export class Game extends DurableObject {
     const rows = this.all("SELECT * FROM props WHERE status='open' OR created > ? ORDER BY (status='open') DESC, closes ASC LIMIT 40", Date.now() - 7 * 86400_000);
     return rows.map((p) => ({ id: p.id, player: shown(p.player), stat: p.stat, label: STATS[p.stat]?.[2] || p.stat, line: p.line, game: p.game,
       closes: p.closes, status: p.status, value: p.value,
-      users: this.all("SELECT e.user_id AS id, u.name, COALESCE(e.side,'yes') AS side FROM entries e LEFT JOIN users u ON u.id = e.user_id WHERE e.prop_id=? ORDER BY e.ts", p.id) }));
+      users: this.all("SELECT e.user_id AS id, u.name, COALESCE(e.side,'yes') AS side, COALESCE(e.units,1) AS units FROM entries e LEFT JOIN users u ON u.id = e.user_id WHERE e.prop_id=? ORDER BY e.ts", p.id) }));
   }
   herd() { return this.all("SELECT id, name, points FROM users"); }
   leaders() { return this.all("SELECT id, name, points FROM users ORDER BY points DESC LIMIT 10"); }
