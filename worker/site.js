@@ -760,6 +760,9 @@ ${FIELD_CSS}
 @keyframes fall{from{transform:translateY(0) rotate(0)}to{transform:translateY(560px) rotate(720deg)}}
 .tdword{position:absolute;top:10%;transform:translateX(-50%);z-index:1600;font:900 clamp(26px,5vw,56px)/1 system-ui;color:#ffc82c;-webkit-text-stroke:2px #15172b;animation:pop .4s cubic-bezier(.2,1.4,.4,1);pointer-events:none}
 .pflag{width:46px;height:46px;margin:-23px;z-index:980;animation:none;font-size:0}
+.fball{position:absolute;width:34px;height:22px;margin:-11px -17px;z-index:1400;pointer-events:none}.fball.held{transition:none}
+.boomfx{position:absolute;transform:translate(-50%,-50%);font-size:64px;z-index:1500;animation:pop .35s cubic-bezier(.2,1.4,.4,1);pointer-events:none}
+.goalpost{position:absolute;left:86%;width:10%;top:18%;height:50%;z-index:1;pointer-events:none}
 .rw img.mad{animation:shake .25s linear infinite}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
 .madbub{position:absolute;left:50%;top:-6px;transform:translateX(-50%);font-size:26px;animation:pop .3s}
 .rw.me{cursor:default}.rw.me span{background:var(--gold);color:#111;box-shadow:0 0 0 2px #111}.rw.me span b{color:#111}
@@ -819,7 +822,7 @@ function connect() {
     if (herdHandler) herdHandler(m); };
   sock.onclose = () => setTimeout(connect, 5000);
 }
-const MOMENT = { flag: ["🟨", "FLAG!"], refsplan: ["🟨", "REFS PLAN!"], td: ["🏈", "TOUCHDOWN!"], touchdown: ["🏈", "TOUCHDOWN!"] };
+const MOMENT = { flag: ["🟨", "FLAG!"], refsplan: ["🟨", "REFS PLAN!"], int: ["🫳", "INTERCEPTION!"], fumble: ["🏈", "FUMBLE!"], itsgood: ["🥅", "IT'S GOOD!"], td: ["🏈", "TOUCHDOWN!"], touchdown: ["🏈", "TOUCHDOWN!"] };
 function showMoment(m) {
   if (m.fx !== false && herdHandler) herdHandler({ t: "fx", cmd: m.cmd });
   if (!m.url) return;
@@ -885,8 +888,93 @@ function pasture() {
       showOn = false;
     }, ms);
   }
+  const BALL = '<svg viewBox="-20 -12 40 24" width="100%" height="100%"><ellipse rx="18" ry="10" fill="#8b4a22" stroke="#15172b" stroke-width="3"/><path d="M -7 0 L 7 0 M -4 -3 l 0 6 M 0 -3 l 0 6 M 4 -3 l 0 6" stroke="#fff" stroke-width="2"/></svg>';
+  const word = (text, x) => { const w = document.createElement("div"); w.className = "tdword fxbit"; w.textContent = text; w.style.left = x + "%"; pa.appendChild(w); };
+  const confetti = (x0, x1, n = 60) => { for (let k = 0; k < n; k++) { const c = document.createElement("i"); c.className = "confetti fxbit";
+    c.style.left = rnd(x0, x1) + "%"; c.style.background = ["#ffc82c", "#1f55d6", "#fff", "#ff5ec4", "#5ee08f"][k % 5];
+    c.style.animationDelay = rnd(0, 2) + "s"; c.style.animationDuration = rnd(2.2, 4) + "s"; pa.appendChild(c); } };
+  // a football flying from a to b (percent coords) in a lob; resolves when it lands
+  function throwBall(a, b, ms, lift = 22, cls = "") {
+    const f = document.createElement("div"); f.className = "fball fxbit " + cls; f.innerHTML = BALL; pa.appendChild(f);
+    f.style.left = b.x + "%"; f.style.top = b.y + "%";
+    return f.animate([{ left: a.x + "%", top: a.y + "%", transform: "rotate(0) scale(1)" },
+      { left: (a.x + b.x) / 2 + "%", top: Math.min(a.y, b.y) - lift + "%", transform: "rotate(540deg) scale(1.25)", offset: 0.5 },
+      { left: b.x + "%", top: b.y + "%", transform: "rotate(1080deg) scale(1)" }], { duration: ms, easing: "linear" }).finished.then(() => f);
+  }
+  const handOf = (s) => ({ x: s.x + 2, y: s.y - 9 });
   function fieldFx(cmd) {
     if (showOn) return;
+    if (cmd === "int") {   // offense throws, defense picks it off and takes it back
+      showOn = true;
+      const order = sheep.map((_, i) => i).sort(() => Math.random() - 0.5);
+      const off = order.filter((_, k) => k % 2 === 0), def = order.filter((_, k) => k % 2 === 1);
+      off.forEach((i, k) => goTo(sheep[i], rnd(18, 38), 28 + (k + 0.5) * (66 / off.length), 14));
+      def.forEach((i, k) => goTo(sheep[i], rnd(60, 80), 28 + (k + 0.5) * (66 / Math.max(1, def.length)), 14));
+      word("OFFENSE", 28); word("DEFENSE", 72);
+      setTimeout(() => {
+        const qb = sheep[off[0]], pick = sheep[def[0] ?? off[1]];
+        if (!pick) return;
+        pose(off[0], "pose_wave");
+        throwBall(handOf(qb), handOf(pick), 1300, 24).then((ball) => {
+          ball.remove(); pose(def[0], "pose_fist");
+          pa.querySelectorAll(".tdword").forEach((e) => e.remove()); word("PICKED OFF!", 50);
+          // the picker runs it back; the rest of the defense escorts, the offense hangs their heads
+          goTo(pick, 6, pick.y, 16);
+          def.slice(1).forEach((i) => goTo(sheep[i], rnd(8, 26), sheep[i].y, rnd(12, 15)));
+          off.forEach((i) => pose(i, "pose_shrug"));
+          setTimeout(() => { def.forEach((i, k) => pose(i, k % 2 ? "pose_roof" : "pose_td")); confetti(0, 35, 50); }, 2800);
+        });
+      }, 2400);
+      endShow(11000);
+    }
+    if (cmd === "fumble") {   // two rams collide, the ball pops loose, everybody scrambles
+      showOn = true;
+      const [ci, hi] = sheep.map((_, i) => i).sort(() => Math.random() - 0.5);
+      const carrier = sheep[ci], hitter = sheep[hi];
+      if (!hitter) { showOn = false; return; }
+      sheep.forEach((s, i) => { if (i !== ci && i !== hi) s.fx = { tx: s.x, ty: s.y, speed: 0 }; });
+      goTo(carrier, 38, 62, 18); goTo(hitter, 62, 62, 18);
+      const ball = document.createElement("div"); ball.className = "fball held fxbit"; ball.innerHTML = BALL; pa.appendChild(ball);
+      const follow = setInterval(() => { const h = handOf(carrier); ball.style.left = h.x + "%"; ball.style.top = h.y + "%"; }, 30);
+      setTimeout(() => { goTo(carrier, 47, 62, 30); goTo(hitter, 53, 62, 30); }, 1700);   // charge
+      setTimeout(() => {
+        clearInterval(follow); ball.remove();
+        const boom = document.createElement("div"); boom.className = "boomfx fxbit"; boom.textContent = "💥"; boom.style.left = "50%"; boom.style.top = "52%"; pa.appendChild(boom);
+        word("FUMBLE!", 50);
+        goTo(carrier, 40, 64, 20); goTo(hitter, 60, 64, 20);
+        carrier.img.classList.add("mad");
+        const spot = { x: rnd(20, 80), y: rnd(32, 88) };
+        throwBall({ x: 50, y: 50 }, spot, 900, 30).then((b) => {
+          b.animate([{ transform: "translateY(0) rotate(0)" }, { transform: "translateY(-18px) rotate(160deg)" }, { transform: "translateY(0) rotate(300deg)" }, { transform: "translateY(-6px) rotate(380deg)" }, { transform: "translateY(0) rotate(420deg)" }], { duration: 900 });
+          sheep.forEach((s) => goTo(s, spot.x + rnd(-6, 6), spot.y + rnd(-4, 4), rnd(14, 24)));   // pile on
+          const winner = Math.floor(Math.random() * sheep.length);
+          setTimeout(() => { goTo(sheep[winner], spot.x, spot.y, 30); b.remove(); pose(winner, "pose_td"); word("RECOVERED!", spot.x); }, 2600);
+        });
+      }, 2500);
+      endShow(10000);
+    }
+    if (cmd === "itsgood") {   // field goal: kicker boots it right down the middle of the uprights
+      showOn = true;
+      const post = document.createElement("div"); post.className = "goalpost fxbit";
+      post.innerHTML = '<svg viewBox="0 0 120 200" width="100%" height="100%"><path d="M 60 200 L 60 110" stroke="#15172b" stroke-width="14"/><path d="M 60 200 L 60 110" stroke="#ffd400" stroke-width="8"/><path d="M 14 110 L 106 110 M 14 110 L 14 6 M 106 110 L 106 6" stroke="#15172b" stroke-width="14" stroke-linecap="round"/><path d="M 14 110 L 106 110 M 14 110 L 14 6 M 106 110 L 106 6" stroke="#ffd400" stroke-width="8" stroke-linecap="round"/></svg>';
+      pa.appendChild(post);
+      const ki = Math.floor(Math.random() * sheep.length), kicker = sheep[ki];
+      sheep.forEach((s, i) => { if (i !== ki) goTo(s, rnd(14, 50), rnd(28, 94), 10); });
+      goTo(kicker, 40, 62, 14);
+      const tee = document.createElement("div"); tee.className = "fball fxbit"; tee.innerHTML = BALL; tee.style.left = "46%"; tee.style.top = "62%"; pa.appendChild(tee);
+      setTimeout(() => goTo(kicker, 45, 62, 18), 1600);
+      setTimeout(() => {
+        tee.remove();
+        // through the middle: the uprights sit at x 86-96%, crossbar at ~44% from the top
+        throwBall({ x: 46, y: 62 }, { x: 91, y: 30 }, 1500, 26, "kicked").then((b) => {
+          b.animate([{ left: "91%", top: "30%" }, { left: "99%", top: "34%" }], { duration: 300, fill: "forwards" });
+          word("IT'S GOOD!", 50); confetti(30, 100, 40);
+          sheep.forEach((s, i) => pose(i, i % 2 ? "pose_td" : "pose_victory"));
+          setTimeout(() => b.remove(), 320);
+        });
+      }, 2100);
+      endShow(9500);
+    }
     if (cmd === "td" || cmd === "touchdown") {
       showOn = true;
       const left = Math.random() < 0.5, ez = (a, b) => left ? rnd(a, b) : 100 - rnd(a, b);

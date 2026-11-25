@@ -136,7 +136,7 @@ export class Game extends DurableObject {
     if (this.ctx.getWebSockets().length) await this.ctx.storage.setAlarm(Date.now() + 15_000);
   }
   momentConfig() {
-    return { channels: JSON.parse(this.meta("momentChannels") || "{}"), triggers: [...new Set(["flag", "td", "touchdown", "refsplan", ...JSON.parse(this.meta("momentTriggers") || "[]")])].filter((t) => !JSON.parse(this.meta("momentOff") || "[]").includes(t)) };
+    return { channels: JSON.parse(this.meta("momentChannels") || "{}"), triggers: [...new Set(["flag", "td", "touchdown", "refsplan", "int", "fumble", "itsgood", ...JSON.parse(this.meta("momentTriggers") || "[]")])].filter((t) => !JSON.parse(this.meta("momentOff") || "[]").includes(t)) };
   }
   toggleMomentChannel(id) {
     const c = this.momentConfig().channels;
