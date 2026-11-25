@@ -1423,15 +1423,17 @@ function bingoView() {
       + B.card.map((c, i) => '<div class="bgsq' + (c.id === "free" ? " free" : "") + (on(i) ? " hit" : "") + (win.has(i) ? " win" : "") + '"><span>' + esc(c.label) + '</span>' + (on(i) && c.id !== "free" ? '<i></i>' : "") + '</div>').join("")
       + '</div></div><div class="bgside">'
       + '<div class="bgstat"><b>' + marked + '<small>/24</small></b><span>marked</span></div><div class="bgstat' + (n ? " gold" : "") + '"><b>' + n + '</b><span>' + (n === 1 ? "BINGO!" : n ? "BINGOS!" : "bingos") + '</span></div>'
+      + '<div class="bgstat' + (n ? " gold" : "") + '"><b>\u{1F381}</b><span>' + (n ? (B.crates || 5) + " crates are yours" : "Any bingo pays " + (B.crates || 5) + " crates") + '</span></div>'
       + (B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live game every minute.</p>'
         : '<button class="bgroll" id="bgroll"' + (bingoBusy ? " disabled" : "") + '>🎲 Re-roll my card</button><p class="note">Re-roll as often as you want until kickoff (' + esc(when) + '). Then it locks.</p>')
+      + '<p class="note">This card runs for the game week, until Tuesday 6 AM.</p>'
       + '</div></div>';
   } else {
     html += '<div class="empty">' + (B.expired ? "Your key expired. " : "") + 'Type <b>/bingo</b> in Discord and open the link to get your card for ' + esc(g.name) + '.</div>';
   }
   const board = B.board || [];
   html += '<h3 class="past">Cards in play (' + board.length + ')</h3>' + (board.length ? '<table><thead><tr><th>#</th><th>Player</th><th>Marked</th><th>Bingos</th></tr></thead><tbody>'
-    + board.map((r, i) => '<tr' + (r.id === B.me ? ' class="mine"' : "") + '><td class="n">' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td class="n">' + r.marked + '/24</td><td class="n">' + (r.bingos ? "🎱 " + r.bingos : "0") + '</td></tr>').join("")
+    + board.map((r, i) => '<tr' + (r.id === B.me ? ' class="mine"' : "") + '><td class="n">' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td class="n">' + r.marked + '/24</td><td class="n">' + (r.bingos ? "\u{1F3B1} " + r.bingos + (r.paid ? " \u00b7 \u{1F381}" : ""): "0") + '</td></tr>').join("")
     + '</tbody></table>' : '<div class="empty">Nobody has a card yet.</div>');
   view.innerHTML = html;
   const rb = document.getElementById("bgroll");

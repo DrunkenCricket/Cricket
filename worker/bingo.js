@@ -118,54 +118,81 @@ export const COMMON = [
   ["3out", "Rams D forces a 3-and-out", (G) => G.drives.some((d) => d.team !== RAMS && d.plays <= 3 && /punt/i.test(d.result))],
   ["drive10", "Rams 10+ play drive", (G) => G.drives.some((d) => d.team === RAMS && d.plays >= 10)],
   ["drive80", "Rams 80+ yard TD drive", (G) => G.drives.some((d) => d.team === RAMS && d.score && d.yards >= 80)],
+  ["fg2", "Rams 2+ field goals", (G) => count(G, (p) => p.rams && /field goal good/.test(p.type)) >= 2],
+  ["qbsacked", "Rams QB gets sacked", (G) => any(G, (p) => p.rams && /sack/.test(p.type))],
+  ["sacked3", "Rams QB sacked 3+ times", (G) => count(G, (p) => p.rams && /sack/.test(p.type)) >= 3],
+  ["otdpass", "Opponent touchdown pass", (G) => any(G, (p) => !p.rams && /passing touchdown/.test(p.type))],
+  ["otdrush", "Opponent rushing touchdown", (G) => any(G, (p) => !p.rams && /rushing touchdown/.test(p.type))],
+  ["ofg", "Opponent field goal", (G) => any(G, (p) => !p.rams && /field goal good/.test(p.type))],
+  ["orush100", "Opponent 100+ rushing yards", (G) => num(G.oppS.rushingYards) >= 100],
+  ["oyds300", "Opponent 300+ total yards", (G) => num(G.oppS.totalYards) >= 300],
+  ["rto", "Rams turn it over", (G) => num(G.rams.turnovers) >= 1],
+  ["rint", "Rams throw an interception", (G) => any(G, (p) => p.rams && /interception/.test(p.type))],
+  ["rfum", "Rams fumble", (G) => any(G, (p) => p.rams && /fumbles/i.test(p.text))],
+  ["rzperfect", "Rams perfect in the red zone (2+ trips)", (G) => G.final && second(G.rams.redZoneAttempts) >= 2 && num(G.rams.redZoneAttempts) === second(G.rams.redZoneAttempts)],
+  ["pts40", "Rams score 40+ points", (G) => G.rs >= 40],
+  ["q2td", "Rams 2 TDs in one quarter", (G) => [1, 2, 3, 4, 5].some((q) => count(G, (p) => p.q === q && p.rams && /touchdown/.test(p.type)) >= 2)],
+  ["win14", "Rams win by 14+", (G) => G.final && G.rs - G.os >= 14],
+  ["comeback", "Rams win after trailing", (G) => G.final && G.rs > G.os && scores(G).some((x) => x.o > x.r)],
+  ["halftie", "Tied at halftime", (G) => G.half && (() => { const s = scores(G).filter((x) => x.q <= 2).at(-1); return !s || s.r === s.o; })()],
+  ["r4th", "Rams go for it on 4th down", (G) => second(G.rams.fourthDownEff) >= 1],
+  ["o4th", "Opponent goes for it on 4th down", (G) => second(G.oppS.fourthDownEff) >= 1],
+  ["punt55", "55+ yard punt", (G) => any(G, (p) => /punt/.test(p.type) && Number((p.text.match(/punts (\d+) yards/i) || [])[1]) >= 55)],
+  ["offset", "Offsetting penalties", (G) => any(G, (p) => /offsetting/i.test(p.text))],
+  ["unsport", "Unsportsmanlike conduct or taunting", (G) => any(G, (p) => /unsportsmanlike|taunting/i.test(p.text))],
+  ["facemask", "Face mask penalty", (G) => any(G, (p) => /face ?mask/i.test(p.text))],
+  ["neutral", "Neutral zone infraction or encroachment", (G) => any(G, (p) => /neutral zone|encroachment/i.test(p.text))],
+  ["grounding", "Intentional grounding", (G) => any(G, (p) => /intentional grounding/i.test(p.text))],
+  ["r2pt", "Rams convert a 2-point try", (G) => any(G, (p) => p.rams && /two-point conversion.*succeeds/i.test(p.text))],
+  ["lead14", "Rams lead by 14+", (G) => scores(G).some((x) => x.r - x.o >= 14)],
+  ["halfshut", "Rams D pitches a shutout half", (G) => (qDone(G, 2) && quarterPts(G, 1).o + quarterPts(G, 2).o === 0) || (G.final && quarterPts(G, 3).o + quarterPts(G, 4).o === 0)],
+  ["aftto", "Rams score right after a takeaway", (G) => G.drives.some((d, i) => d.team !== RAMS && /interception|fumble/i.test(d.result) && G.drives[i + 1]?.team === RAMS && G.drives[i + 1].score)],
+  ["b2b", "Rams score on back-to-back drives", (G) => { const r = G.drives.filter((d) => d.team === RAMS); return r.some((d, i) => d.score && r[i + 1]?.score); }],
 ].map(([id, label, test]) => ({ id, label, test }));
 
-// ---------- player squares (Sleeper projections -> lines; ESPN box score -> results) ----------
+// ---------- player squares: every prop bet for the Rams game, both teams ----------
+// Same players, stats and lines as /bet: Sleeper projections set the line, ESPN's box score settles it.
 const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
-const r5 = (v, step = 5) => Math.max(step, Math.round(v / step) * step);
-const KEYS = { pass_yds: ["passing", "passingYards"], pass_td: ["passing", "passingTouchdowns"], rush_yds: ["rushing", "rushingYards"],
-  rec_yds: ["receiving", "receivingYards"], rec: ["receiving", "receptions"], rush_td: ["rushing", "rushingTouchdowns"], rec_td: ["receiving", "receivingTouchdowns"] };
+const KEYS = { pass_yds: ["passing", "passingYards"], rush_yds: ["rushing", "rushingYards"], rec_yds: ["receiving", "receivingYards"],
+  receptions: ["receiving", "receptions"], rush_td: ["rushing", "rushingTouchdowns"], rec_td: ["receiving", "receivingTouchdowns"] };
+const SLEEPER_KEY = { pass_yds: "pass_yd", rush_yds: "rush_yd", rec_yds: "rec_yd", receptions: "rec" };
+const WORDS = { pass_yds: "pass yards", rush_yds: "rush yards", rec_yds: "receiving yards", receptions: "catches" };
+function lineFor(stat, st) {   // identical to the prop bet lines
+  if (stat === "any_td") return 1;
+  const v = st[SLEEPER_KEY[stat]] || 0;
+  return stat === "receptions" ? Math.max(2, Math.round(v)) : Math.max(10, Math.round(v / 5) * 5);
+}
+/** proj: Sleeper projections for both teams in the Rams game. extra: open prop bets on that game ({player, stat, line}). */
+export function propSquares(proj, extra = []) {
+  const out = [], seen = new Set();
+  const add = (player, stat, line) => {
+    const id = "p:" + norm(player).replace(/ /g, "_") + ":" + stat + ":" + line;
+    if (seen.has(id) || !(KEYS[stat] || stat === "any_td")) return;
+    seen.add(id);
+    out.push({ id, player, stat, line, label: stat === "any_td" ? player + " scores a TD" : player + " " + line + "+ " + WORDS[stat] });
+  };
+  for (const p of proj) {
+    const st = p.stats || {}, pos = p.player.position, name = p.player.first_name + " " + p.player.last_name;
+    if ((st.pts_ppr || 0) < 6) continue;   // the same "notable player" cut /bet uses
+    const stats = (pos === "QB" ? ["pass_yds", st.rush_yd >= 15 && "rush_yds", (st.rush_td || 0) >= 0.25 && "any_td"]
+      : pos === "RB" ? ["rush_yds", st.rec >= 2 && "receptions", "any_td"]
+      : ["rec_yds", "receptions", (st.rec_td || 0) >= 0.3 && "any_td"]).filter(Boolean);
+    for (const stat of stats) add(name, stat, lineFor(stat, st));
+  }
+  for (const b of extra) add(b.player, b.stat, b.line);
+  return out;
+}
 function pstat(players, name, stat) {
   const want = norm(name);
   const [cat, key] = KEYS[stat];
   for (const t of players) {
-    if (t.team?.id !== RAMS) continue;
     const c = (t.statistics || []).find((s) => s.name === cat);
     if (!c) continue;
     const i = c.keys.indexOf(key);
-    const a = (c.athletes || []).find((x) => norm(x.athlete?.displayName) === want);
+    const a = (c.athletes || []).find((x) => { const n = norm(x.athlete?.displayName); return n === want || (want.includes(" ") && n.includes(want)); });
     if (a) return num(a.stats[i]);
   }
   return 0;
-}
-/** Build this week's Rams player squares from Sleeper projections (list of {player, position, stats}). */
-export function playerSquares(rams) {
-  const out = [], name = (p) => `${p.player.first_name} ${p.player.last_name}`, last = (p) => p.player.last_name;
-  const top = (pos, key) => rams.filter((p) => pos.includes(p.player.position)).sort((a, b) => (b.stats[key] || 0) - (a.stats[key] || 0));
-  const add = (id, label, player, stat, line) => out.push({ id, label, player, stat, line });
-  const qb = top(["QB"], "pass_yd")[0];
-  if (qb) {
-    const l = r5(qb.stats.pass_yd || 240, 25);
-    add("qb_y1", `${last(qb)} ${l}+ pass yards`, name(qb), "pass_yds", l);
-    add("qb_y2", `${last(qb)} ${l + 50}+ pass yards`, name(qb), "pass_yds", l + 50);
-    add("qb_td2", `${last(qb)} 2+ TD passes`, name(qb), "pass_td", 2);
-    add("qb_td3", `${last(qb)} 3+ TD passes`, name(qb), "pass_td", 3);
-  }
-  const rbs = top(["RB"], "rush_yd");
-  if (rbs[0]) {
-    const l = r5(rbs[0].stats.rush_yd || 60, 10);
-    add("rb1_y", `${last(rbs[0])} ${l}+ rush yards`, name(rbs[0]), "rush_yds", l);
-    add("rb1_y2", `${last(rbs[0])} ${l + 30}+ rush yards`, name(rbs[0]), "rush_yds", l + 30);
-    add("rb1_td", `${last(rbs[0])} scores a TD`, name(rbs[0]), "any_td", 1);
-  }
-  if (rbs[1]) add("rb2_td", `${last(rbs[1])} scores a TD`, name(rbs[1]), "any_td", 1);
-  top(["WR", "TE"], "rec_yd").slice(0, 4).forEach((p, i) => {
-    const l = r5(p.stats.rec_yd || 40, 10);
-    add("wr" + i + "_y", `${last(p)} ${l}+ receiving yards`, name(p), "rec_yds", l);
-    add("wr" + i + "_td", `${last(p)} scores a TD`, name(p), "any_td", 1);
-    if (i < 2) add("wr" + i + "_r", `${last(p)} ${Math.max(3, Math.round(p.stats.rec || 4) + 1)}+ catches`, name(p), "rec", Math.max(3, Math.round(p.stats.rec || 4) + 1));
-  });
-  return out;
 }
 const playerHit = (G, s) => s.stat === "any_td"
   ? pstat(G.players, s.player, "rush_td") + pstat(G.players, s.player, "rec_td") >= s.line
