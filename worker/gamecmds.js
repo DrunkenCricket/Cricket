@@ -6,7 +6,7 @@ import { CRATE_COST, PICK_POINTS, VOTE_POINTS, PODIUM_RUTS, PROP_COST, FIGHT_STA
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
-export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "giveruts", "moments", "herdcommands", "bet", "skin"]);
+export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "lockerroom", "giveruts", "moments", "herdcommands", "bet", "skin"]);
 
 const game = (env) => env.GAME.get(env.GAME.idFromName("main"));
 const who = (i) => i.member?.user || i.user;
@@ -89,10 +89,10 @@ export async function gameCommand(i, env, ctx) {
       });
     }
 
-    case "locker": case "lockeroom": {
-      const link = `${SITE}/lockeroom#t=${await lockerToken(env, uid)}`;
-      return msg({ content: "🎒 **The Lockeroom**: unbox crates, buy more with RUTS, and dress your ram. This link is just for you and works for 2 hours.",
-        components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Enter the Lockeroom", emoji: { name: "🎒" } }] }] }, true);
+    case "locker": case "lockeroom": case "lockerroom": {
+      const link = `${SITE}/lockerroom#t=${await lockerToken(env, uid)}`;
+      return msg({ content: "🎒 **The Locker Room**: unbox crates, buy more with RUTS, and dress your ram. This link is just for you and works for 2 hours.",
+        components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Enter the Locker Room", emoji: { name: "🎒" } }] }] }, true);
     }
 
     case "herdcommands": {
@@ -102,12 +102,12 @@ export async function gameCommand(i, env, ctx) {
         fields: [
           { name: "🏈 Pick'em", value: [line("/standings", "season leaderboard"), line("/mypicks", "your record and last week's picks")].join("\n") },
           { name: "💰 RUTS", value: [line("/ruts", "your RUTS, crates and the top 10"), `Every pick'em vote = **${VOTE_POINTS} RUTS**, right picks **+${PICK_POINTS}** more. Weekly: most correct wins a **crate**, 2nd and 3rd get **${PODIUM_RUTS} RUTS** (ties share).`].join("\n") },
-          { name: "🐏 Your ram", value: [line("/crate", `open a crate (first is free, then ${CRATE_COST} RUTS)`), line("/lockeroom", "the website locker: unbox, shop and dress your ram"),
+          { name: "🐏 Your ram", value: [line("/crate", `open a crate (first is free, then ${CRATE_COST} RUTS)`), line("/lockerroom", "the website locker: unbox, shop and dress your ram"),
             line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/skin", "pick a skin tone (free)"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
           { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet: ${PROP_COST} RUTS to pick hits or misses, the right side wins a crate`), line("/prop cancel", "cancel a bet you posted"),
             line("/prop check", "settle finished bets now"), line("/fight", `challenge a ram: ${FIGHT_STAKE} RUTS each, winner takes all`)].join("\n") },
           { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "field shows on the website: !TD !flag !refsplan !int !fumble !itsgood !tutu")].join("\n") },
-          { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Lockeroom](${SITE})` },
+          { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Locker Room](${SITE})` },
         ],
       }] });
     }

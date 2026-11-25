@@ -18,7 +18,7 @@ COMMANDS = [
     # ram game
     {"name": "ruts", "description": "Your RUTS, crates and the RUTS leaderboard", "type": 1, "contexts": [0],
      "options": [{"type": 6, "name": "user", "description": "Whose RUTS to show", "required": False}]},
-    {"name": "lockeroom", "description": "The Lockeroom: unbox crates, shop with RUTS and dress your ram on the website", "type": 1, "contexts": [0]},
+    {"name": "lockerroom", "description": "The Locker Room: unbox crates, shop with RUTS and dress your ram on the website", "type": 1, "contexts": [0]},
     {"name": "moments", "description": "Mods: show !flag / !TD GIFs on the website", "type": 1, "contexts": [0], "default_member_permissions": "32",
      "options": [
          {"type": 1, "name": "here", "description": "Start (or stop) watching this channel for tracked triggers"},

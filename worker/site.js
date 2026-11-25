@@ -316,8 +316,8 @@ async function betsData(env, ctx) {
 export async function handleSite(request, env, ctx) {
   const { pathname } = new URL(request.url);
   if (pathname === "/api/locker" && request.method === "POST" && env.GAME) return lockerApi(request, env);
-  if (pathname === "/robots.txt") return new Response("User-agent: *\nDisallow: /lockeroom\nDisallow: /locker\n", { headers: { "Content-Type": "text/plain" } });
-  if (pathname === "/locker" || pathname === "/lockeroom") return new Response(lockerPage(), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
+  if (pathname === "/robots.txt") return new Response("User-agent: *\nDisallow: /lockeroom\nDisallow: /lockerroom\nDisallow: /locker\n", { headers: { "Content-Type": "text/plain" } });
+  if (pathname === "/locker" || pathname === "/lockeroom" || pathname === "/lockerroom") return new Response(lockerPage(), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
   try {
     if (pathname === "/api/week") return json(await weekData(env, ctx), 60);
     if (pathname === "/api/history") return json(await historyData(env, ctx), 120);
@@ -390,7 +390,7 @@ const FIELD = `<div class="ez l"><b>RAMS</b></div><div class="ez r"><b>HERD</b><
   + Array.from({ length: 11 }, (_, i) => `<div class="yl" style="left:${8 + i * 8.4}%"></div>`).join("")
   + [10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, i) => `<div class="num" style="left:${16.4 + i * 8.4}%">${n}</div>`).join("");
 
-// ---------- The Lockeroom scene (1000 x 470): lockers with gear on the left, the shower in the back right ----------
+// ---------- The Locker Room scene (1000 x 470): lockers with gear on the left, the shower in the back right ----------
 const SC_OUT = "#15172b";
 function lockerScene() {
   const jersey = (x, y, c, num, trim) => `<g transform="translate(${x} ${y})">
@@ -460,7 +460,7 @@ function lockerPage() {
     items: Object.values(ITEMS).filter((i) => i.rarity !== "secret").map((i) => [i.id, i.name, i.slot, i.rarity, i.starter ? 1 : 0]),
   };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Lockeroom</title><meta name="robots" content="noindex">
+<title>The Locker Room</title><meta name="robots" content="noindex">
 <style>:root{--bg:#0b1024;--card:#151d3b;--card2:#1c2650;--line:#26315f;--ink:#eef2ff;--dim:#9aa6c7;--gold:#ffc82c;--blue:#003594}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,sans-serif;padding:16px}
 main{max-width:1100px;margin:0 auto}
@@ -507,7 +507,7 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 .it.locked{opacity:.4;cursor:default;filter:grayscale(.6)}.chips small{color:var(--dim);font-weight:500}
 .err{color:#ff8080}.empty{color:var(--dim);padding:24px;text-align:center}a{color:var(--gold)}
 </style></head>
-<body><main><h1>THE <span>LOCKEROOM</span></h1><div class="sub" id="sub">Loading...</div>
+<body><main><h1>THE <span>LOCKER ROOM</span></h1><div class="sub" id="sub">Loading...</div>
 <div class="room" id="room">${lockerScene()}<div id="showers"></div>${lockerFront()}
 <div class="lr-ram" id="ram"><img alt="Your ram"></div>
 <div class="crate" id="crate"><svg viewBox="0 0 170 150" overflow="visible">
@@ -533,7 +533,7 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 <p><a href="/">Pick'em</a> · <a href="/#herd">See the herd</a></p></main>
 <script>
 const M = ${JSON.stringify(meta).replace(/</g, "\\u003c")};
-// The key comes from /lockeroom in Discord. This browser remembers it until it expires, so the site's Lockeroom tab works too.
+// The key comes from /lockerroom in Discord. This browser remembers it until it expires, so the site's Locker Room tab works too.
 let T = new URLSearchParams(location.hash.slice(1)).get("t");
 try {
   if (T) localStorage.setItem("lr_t", T);
@@ -656,8 +656,8 @@ fetch("/api/herd").then((r) => r.json()).then((d) => {
     + Array.from({ length: 6 }, (_, k) => '<i class="bub" style="left:' + (72 + k * 4.5) + '%;bottom:' + (42 + (k % 3) * 4) + '%;width:' + (6 + k % 3 * 4) + 'px;height:' + (6 + k % 3 * 4) + 'px;animation-delay:-' + k * 0.7 + 's"></i>').join("");
 }).catch(() => {});
 if (!T) {
-  $("sub").innerHTML = "Locked. Type <b>/lockeroom</b> in Discord and click the button to get in. Your key works for 2 hours in this browser.";
-  $("buy").disabled = true; $("buy").textContent = "🔒 Run /lockeroom in Discord";
+  $("sub").innerHTML = "Locked. Type <b>/lockerroom</b> in Discord and click the button to get in. Your key works for 2 hours in this browser.";
+  $("buy").disabled = true; $("buy").textContent = "🔒 Run /lockerroom in Discord";
   $("ram").firstChild.src = "/ram/100000000000000000/bare~0.svg";
 } else call("state");
 </script></body></html>`;
@@ -904,7 +904,7 @@ ${FIELD_CSS}
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><a class="navlink" href="/lockeroom">Lockeroom</a></nav>
+<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><a class="navlink" href="/lockerroom">Locker Room</a></nav>
 </div></header>
 <template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
@@ -934,7 +934,7 @@ function card(g, result) {
     + '<div class="vs">' + side(a, total, result) + '<div class="at">@</div>' + side(h, total, result) + '</div>'
     + '<div class="bar"><i style="width:' + ap + '%"></i><b style="width:' + (100 - ap) + '%"></b></div></div>';
 }
-// Herd: every ram roams the field. If this browser holds a Lockeroom key, that person's ram is theirs to drive:
+// Herd: every ram roams the field. If this browser holds a Locker Room key, that person's ram is theirs to drive:
 // click or tap anywhere on the field to walk there, or hold the arrow keys / WASD.
 const keys = {};
 addEventListener("keydown", (e) => { if (tab === "herd" && /^(Arrow|[wasd]$)/i.test(e.key)) { keys[e.key.toLowerCase()] = true; e.preventDefault(); } });
@@ -1048,7 +1048,7 @@ function pasture() {
   sub.textContent = herd.rams.length + " rams on the field";
   if (!herd.rams.length) { view.innerHTML = '<div class="empty">No rams yet. Open your first crate with /crate in Discord.</div>'; return; }
   const note = mine ? "<b>Your ram has the gold tag.</b> Click anywhere on the field to walk there, or use the arrow keys / WASD. Everyone watching sees you move."
-    : "Click a ram to see its gear. Want to drive your own? Run <b>/lockeroom</b> in Discord, open the link once, then come back here.";
+    : "Click a ram to see its gear. Want to drive your own? Run <b>/lockerroom</b> in Discord, open the link once, then come back here.";
   view.innerHTML = '<p class="note">' + note + '</p><div class="lvbug" id="lvbug"></div><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML
     + '<div class="lvchart" id="lvchart"></div><div class="lv-los" id="lvlos" hidden></div><div class="lv-fd" id="lvfd" hidden></div><div class="lv-ball" id="lvball" hidden><i></i><b></b></div>'
     + '</div><div class="lvgrid" id="lvgrid" hidden><div class="lvplays" id="lvplays"></div><div class="lvstats" id="lvstats"></div></div>';

@@ -1,4 +1,4 @@
-// Signed Lockeroom keys, shared by the Discord commands, the website and the live Herd.
+// Signed Locker Room keys, shared by the Discord commands, the website and the live Herd.
 // Signed, expiring locker links: uid.expiry.signature (HMAC with a Worker secret, so nobody can forge one).
 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 async function hmac(env, text) {
