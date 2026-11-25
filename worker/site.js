@@ -422,9 +422,9 @@ const TOPBAR_CSS = `.tb{background:linear-gradient(135deg,#003594,#001a4d);paddi
 .tb .w{max-width:1100px;margin:0 auto}.tb .t{margin:0 0 14px;font:700 28px/1.2 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:.5px;color:#e8ebf0}.tb .t span{color:#ffa300}
 .tb nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}.tb nav::-webkit-scrollbar{display:none}
 .tb nav a{white-space:nowrap;flex:0 0 auto;color:#c9d3ea;font-weight:600;padding:10px 16px;text-decoration:none;border-radius:10px 10px 0 0}.tb nav a:hover{color:#ffa300}
-.tb nav a.on{background:var(--bg);color:#ffa300}@media (max-width:560px){.tb .t{font-size:22px}.tb nav a{padding:10px}}`;
+.tb nav a.on{background:var(--bg);color:#ffa300}@media (max-width:560px){.tb .t{font-size:22px}.tb nav{gap:0}.tb nav a{padding:10px 9px;font-size:14px}.tb .lg{display:none}}`;
 const TOPBAR = (on) => `<header class="tb"><div class="w"><div class="t">RAMS <span>PICK'EM</span></div><nav>`
-  + [["/#herd", "Herd"], ["/locker", "Locker Room"], ["/#week", "Pick'em"], ["/#bingo", "Bingo"], ["/#bets", "Bets &amp; Fights"]]
+  + [["/#herd", "Herd"], ["/locker", 'Locker<span class="lg"> Room</span>'], ["/#week", "Pick'em"], ["/#bingo", "Bingo"], ["/#bets", 'Bets<span class="lg"> &amp; Fights</span>']]
     .map(([h, l]) => `<a href="${h}"${h === on ? ' class="on"' : ""}>${l}</a>`).join("") + `</nav></div></header>`;
 
 // ---------- The Locker Room scene (1000 x 470): lockers with gear on the left, the shower in the back right ----------
@@ -968,15 +968,15 @@ ${FIELD_CSS}
 .rw.me{cursor:default}.rw.me span{background:var(--gold);color:#111;box-shadow:0 0 0 2px #111}.rw.me span b{color:#111}
 .rw.me img{filter:drop-shadow(0 0 10px rgba(255,200,44,.9))}.pasture.field{cursor:crosshair}
 .note b{color:var(--gold)}.rw:hover span b{color:#111}
-@media (max-width:560px){.pasture{height:460px}.rw,.rw img{width:110px}.rw{margin-left:-55px;margin-top:-110px}.rw img{height:110px}}
-@media (max-width:560px){.grid{grid-template-columns:1fr}h1{font-size:22px}nav button{padding:10px 10px}}
+@media (max-width:560px){.pasture{height:460px}.rw,.rw img{width:86px}.rw{margin-left:-43px;margin-top:-86px}.rw img{height:86px}.rw span{font-size:10px;padding:1px 5px}}
+@media (max-width:560px){.grid{grid-template-columns:1fr}h1{font-size:22px}nav{gap:0}nav button,nav .navlink{padding:10px 9px;font-size:14px}.lg{display:none}}
 </style>
 </head>
 <body>
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="herd" class="on">Herd</button><a class="navlink" href="/locker">Locker Room</a><button data-t="week">Pick'em</button><button data-t="bingo">Bingo</button><button data-t="bets">Bets &amp; Fights</button></nav>
+<nav><button data-t="herd" class="on">Herd</button><a class="navlink" href="/locker">Locker<span class="lg"> Room</span></a><button data-t="week">Pick'em</button><button data-t="bingo">Bingo</button><button data-t="bets">Bets<span class="lg"> &amp; Fights</span></button></nav>
 </div></header>
 <template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
