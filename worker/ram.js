@@ -3,6 +3,7 @@
 // Items live in ITEMS (generated below), ~30 per section, each with a rarity.
 
 import { TEXT } from "./textpaths.js";
+import { addHoliday } from "./holiday.js";
 
 const OUT = "#15172b";
 const S = `stroke="${OUT}" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"`;
@@ -167,6 +168,7 @@ function hornTip(d, w, grow) {
   return `M ${f(bx + px * half)} ${f(by + py * half)} L ${f(x + ux * len)} ${f(y + uy * len)} L ${f(bx - px * half)} ${f(by - py * half)} Z`;
 }
 function hornLayer(h = ITEMS.horns_curl) {
+  if (h.art) return h.art;   // custom horns (antlers, candy canes)
   const d = h.path || HORN_PATHS[h.shape], w = HORN_W[h.shape], cap = h.point ? "butt" : "round";
   const one = `<path d="${d}" fill="none" stroke="${OUT}" stroke-width="${w + 15}" stroke-linecap="${cap}"/>
     ${h.point ? `<path d="${hornTip(d, w, 15)}" fill="${OUT}"/>` : ""}
@@ -564,6 +566,11 @@ item("finish_street", "Street Finish", "finish", "epic");
 item("finish_sticker", "Sticker Finish", "finish", "legendary");
 item("finish_holo", "Holo Sticker Finish", "finish", "mythic");
 item("finish_uncanny", "Uncanny Finish", "finish", "secret");   // never listed in odds
+
+// holiday drop (signs, antlers, hats, sweaters...) - see holiday.js
+addHoliday({ item, txt, TEXT, OUT, S, S6, mirror, shirt: (dk, dname, rarity, d) => {
+  for (const [ck, cname] of CUTS) item(`shirt_${dk}_${ck}`, `${dname.replace(/ (Tee|Jersey|Shirt|Sweater)$/, "")} ${dname.endsWith("Sweater") ? "Sweater " : ""}${cname}`.replace("Sweater Short Sleeve", "Sweater").replace("Sweater Long Sleeve", "Sweater (Long)").replace("Sweater Tank", "Sweater Vest"), "shirt", rarity, { design: d, cut: ck });
+} });
 
 for (const id of Object.values(DEFAULT_LOOK)) ITEMS[id].starter = true;
 

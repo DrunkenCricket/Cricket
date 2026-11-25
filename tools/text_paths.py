@@ -6,7 +6,9 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-WORDS = ["WHOSE", "HOUSE", "RAMS", "RAMS HOUSE", "#1", "$", "D-FENSE", "ALL ACCESS", "MOM", "LA", "GO RAMS", "GOAT", "MVP", "99", "00", "12"]
+WORDS = ["WHOSE", "HOUSE", "RAMS", "RAMS HOUSE", "#1", "$", "D-FENSE", "ALL ACCESS", "MOM", "LA", "GO RAMS", "GOAT", "MVP", "99", "00", "12",
+         "STUFF ME", "LIKE A", "TURKEY", "CUM DOWN", "MY", "CHIMNEY", "SANTA'S", "FAVORITE", "HO", "JINGLE", "MY BELLS", "MISTLETOE", "IS DOWN", "HERE", "UNWRAP", "ME", "GOBBLE", "TIL YOU", "WOBBLE", "THICC", "LIKE", "STUFFING", "ROAST", "CHESTNUTS", "SLEIGH", "ALL DAY", "NAUGHTY", "LIST", "I LIKE IT", "WITH", "GRAVY", "BREAST", "OR", "THIGH?", "SPIKE", "EGGNOG", "SANTA", "BROUGHT A", "BIG PACKAGE", "HO HO", "HOLD UP", "EAT", "MORE", "PIE", "DOWN TO", "DECK", "THE HALLS", "LET'S GET", "BASTED", "NICE?", "NAH.",
+         "WE DO NOT", "USE THAT", "NAME HERE", "VP OF", "MEAT", "ANIME PILLOW", "SPOONER", "HODOR'S", "ILLEGAL", "STREAMING", "CHAMP", "EMOTIONALLY", "REGULATED"]
 
 f = TTFont(FONT)
 gs, cmap, upm = f.getGlyphSet(), f.getBestCmap(), f["head"].unitsPerEm
