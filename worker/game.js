@@ -825,7 +825,7 @@ export class Game extends DurableObject {
     }).sort((a, b) => b.bingos - a.bingos || b.marked - a.marked);
     const labels = Object.fromEntries(pool.map((s) => [s.id, s.label]));
     return { kind, game: g, lockAt, locked, crates: BINGO_CRATES, blackout: BLACKOUT_CRATES, state: this.meta("bingoState:" + key) || "pre", pool: pool.length, hits,
-      card: row ? JSON.parse(row.card).map((id) => ({ id, label: id === "free" ? "FREE" : labels[id] || id })) : null, rerolls: row?.rerolls || 0, board };
+      card: row ? JSON.parse(row.card).map((id) => ({ id, label: id === "free" ? "FREE" : labels[id] || id, team: (String(labels[id] || "").match(/\(([A-Z]{2,3})\)$/) || [])[1] })) : null, rerolls: row?.rerolls || 0, board };
   }
   /** First bingo and a blackout on each card pay out once. */
   payBingos(key, name) {

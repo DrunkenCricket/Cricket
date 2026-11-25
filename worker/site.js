@@ -856,6 +856,7 @@ h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacin
 .bghead b{font:900 clamp(24px,5vw,40px)/1 Archivo,system-ui,sans-serif;font-stretch:125%;color:#ffc82c;text-shadow:0 3px 0 #15172b}
 .bggrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .bgsq{position:relative;aspect-ratio:1;background:#f4f1e8;color:#15172b;border-radius:10px;display:grid;place-items:center;text-align:center;padding:4px;overflow:hidden}
+.bglogo{position:absolute;inset:8%;width:84%;height:84%;object-fit:contain;opacity:.16;filter:saturate(.6);pointer-events:none}
 .bgsq span{font-weight:800;font-size:clamp(9px,1.6vw,13px);line-height:1.15;position:relative;z-index:1}
 .bgsq.free{background:#ffc82c}.bgsq.free span{font:900 clamp(14px,2.6vw,22px)/1 Archivo,system-ui,sans-serif;font-stretch:125%}
 .bgsq i{position:absolute;inset:10%;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffd95eee,#ffa300cc 60%,#e08a00aa);box-shadow:inset 0 -4px 8px #0003;animation:daub .35s ease-out}
@@ -1440,7 +1441,9 @@ function bingoView() {
     BLINES.forEach((l) => { if (l.every(on)) { n++; l.forEach((i) => win.add(i)); } });
     const marked = B.card.filter((c, i) => i !== 12 && on(i)).length;
     html += '<div class="bgwrap"><div class="bgcard"><div class="bghead">' + ["B", "I", "N", "G", "O"].map((c) => '<b>' + c + '</b>').join("") + '</div><div class="bggrid">'
-      + B.card.map((c, i) => '<div class="bgsq' + (c.id === "free" ? " free" : "") + (on(i) ? " hit" : "") + (win.has(i) ? " win" : "") + '"><span>' + esc(c.label) + '</span>' + (on(i) && c.id !== "free" ? '<i></i>' : "") + '</div>').join("")
+      + B.card.map((c, i) => '<div class="bgsq' + (c.id === "free" ? " free" : "") + (on(i) ? " hit" : "") + (win.has(i) ? " win" : "") + '">'
+        + (c.team ? '<img class="bglogo" alt="" src="https://a.espncdn.com/i/teamlogos/nfl/500/' + ({ WAS: "wsh" }[c.team] || c.team.toLowerCase()) + '.png">' : "")
+        + '<span>' + esc(c.team ? c.label.replace(/ \([A-Z]{2,3}\)$/, "") : c.label) + '</span>' + (on(i) && c.id !== "free" ? '<i></i>' : "") + '</div>').join("")
       + '</div></div><div class="bgside">'
       + '<div class="bgstat"><b>' + marked + '<small>/24</small></b><span>marked</span></div><div class="bgstat' + (n ? " gold" : "") + '"><b>' + n + '</b><span>' + (n === 1 ? "BINGO!" : n ? "BINGOS!" : "bingos") + '</span></div>'
       + '<div class="bgstat' + (n ? " gold" : "") + '"><b>\u{1F381}</b><span>' + (marked === 24 ? "BLACKOUT! " + (B.blackout || 10) + " crates are yours" : n ? (B.crates || 5) + " crates are yours. A blackout makes it " + (B.blackout || 10) : "Any bingo pays " + (B.crates || 5) + " crates. A blackout pays " + (B.blackout || 10)) + '</span></div>'
