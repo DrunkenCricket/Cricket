@@ -6,7 +6,7 @@ import { CRATE_COST, PICK_POINTS, VOTE_POINTS, PODIUM_RUTS, PROP_COST, FIGHT_STA
 
 const SITE = "https://rams-bot.ramsherd.workers.dev";
 const GOLD = 0xffa300;
-export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "lockerroom", "giveruts", "moments", "herdcommands", "bet", "skin"]);
+export const GAME_COMMANDS = new Set(["points", "crate", "inventory", "equip", "unequip", "body", "ram", "prop", "ruts", "fight", "locker", "lockeroom", "lockerroom", "giveruts", "moments", "herdcommands", "bet", "skin", "bingo"]);
 
 const game = (env) => env.GAME.get(env.GAME.idFromName("main"));
 const who = (i) => i.member?.user || i.user;
@@ -95,6 +95,13 @@ export async function gameCommand(i, env, ctx) {
         components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Enter the Locker Room", emoji: { name: "🎒" } }] }] }, true);
     }
 
+    case "bingo": {
+      await g.user(uid, name);
+      const link = `${SITE}/#bingo&t=${await lockerToken(env, uid, 24)}`;
+      return msg({ content: "🎱 **Rams Bingo**: your card for this game. Re-roll it as often as you like until kickoff, then it locks and marks itself live from the game. This link is just for you.",
+        components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Open my Bingo card", emoji: { name: "🎱" } }] }] }, true);
+    }
+
     case "herdcommands": {
       const line = (c, d) => `\`${c}\` ${d}`;
       return msg({ embeds: [{
@@ -106,8 +113,9 @@ export async function gameCommand(i, env, ctx) {
             line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/skin", "pick a skin tone (free)"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
           { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet: ${PROP_COST} RUTS to pick hits or misses, the right side wins a crate`), line("/prop cancel", "cancel a bet you posted"),
             line("/prop check", "settle finished bets now"), line("/fight", `challenge a ram: ${FIGHT_STAKE} RUTS each, winner takes all`)].join("\n") },
+          { name: "🎱 Bingo", value: line("/bingo", "your Rams Bingo card for the next game: re-roll until kickoff, it marks itself live") },
           { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "field shows on the website: !TD !flag !refsplan !int !fumble !itsgood !tutu")].join("\n") },
-          { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Locker Room](${SITE})` },
+          { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Bingo, Locker Room](${SITE})` },
         ],
       }] });
     }

@@ -316,6 +316,13 @@ async function betsData(env, ctx) {
 export async function handleSite(request, env, ctx) {
   const { pathname } = new URL(request.url);
   if (pathname === "/api/locker" && request.method === "POST" && env.GAME) return lockerApi(request, env);
+  if (pathname === "/api/bingo" && env.GAME) {   // POST with a key: your card (+ re-roll); GET: the scoreboard only
+    let body = {};
+    if (request.method === "POST") { try { body = await request.json(); } catch {} }
+    const uid = body.t ? await lockerUser(env, body.t) : null;
+    try { return json({ ...(await env.GAME.get(env.GAME.idFromName("main")).bingo(uid, null, body.op)), me: uid, expired: !!body.t && !uid }, 0); }
+    catch (e) { return json({ error: String(e.message || e) }, 0); }
+  }
   if (pathname === "/robots.txt") return new Response("User-agent: *\nDisallow: /lockeroom\nDisallow: /lockerroom\nDisallow: /locker\n", { headers: { "Content-Type": "text/plain" } });
   if (pathname === "/locker" || pathname === "/lockeroom" || pathname === "/lockerroom") return new Response(lockerPage(), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" } });
   try {
@@ -788,7 +795,7 @@ header{background:linear-gradient(135deg,var(--blue),#001a4d);padding:28px 16px 
 .wrap{max-width:1100px;margin:0 auto}
 h1{margin:0;font-size:28px;letter-spacing:.5px}h1 span{color:var(--gold)}
 .sub{color:#c9d3ea;margin:4px 0 18px}
-nav{display:flex;gap:4px}
+nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;max-width:100%}nav::-webkit-scrollbar{display:none}nav button,nav .navlink{white-space:nowrap;flex:0 0 auto}
 nav button{background:none;border:0;color:#c9d3ea;font:inherit;font-weight:600;padding:10px 16px;border-radius:10px 10px 0 0;cursor:pointer}
 nav button.on{background:var(--bg);color:var(--gold)}
 nav .navlink{color:#c9d3ea;font-weight:600;padding:10px 16px;text-decoration:none;border-radius:10px 10px 0 0}nav .navlink:hover{color:var(--gold)}
@@ -829,6 +836,24 @@ td.n{font-variant-numeric:tabular-nums}
 .fight:hover{border-color:var(--gold)}.fight b{color:var(--gold)}.fight.expired,.fight.declined,.fight.cancelled{opacity:.55}.fight u{color:var(--gold)}
 h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacing:1px;margin:26px 0 10px}
 .pasture{height:560px}
+.bgwrap{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.bgcard{flex:1 1 520px;max-width:640px;background:#003594;border:3px solid #ffc82c;border-radius:18px;padding:10px;box-shadow:0 10px 30px #0008}
+.bghead{display:grid;grid-template-columns:repeat(5,1fr);text-align:center;margin-bottom:8px}
+.bghead b{font:900 clamp(24px,5vw,40px)/1 Archivo,system-ui,sans-serif;font-stretch:125%;color:#ffc82c;text-shadow:0 3px 0 #15172b}
+.bggrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.bgsq{position:relative;aspect-ratio:1;background:#f4f1e8;color:#15172b;border-radius:10px;display:grid;place-items:center;text-align:center;padding:4px;overflow:hidden}
+.bgsq span{font-weight:800;font-size:clamp(9px,1.6vw,13px);line-height:1.15;position:relative;z-index:1}
+.bgsq.free{background:#ffc82c}.bgsq.free span{font:900 clamp(14px,2.6vw,22px)/1 Archivo,system-ui,sans-serif;font-stretch:125%}
+.bgsq i{position:absolute;inset:10%;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffd95eee,#ffa300cc 60%,#e08a00aa);box-shadow:inset 0 -4px 8px #0003;animation:daub .35s ease-out}
+.bgsq.hit span{z-index:2;color:#15172b}.bgsq.win{outline:3px solid #ff5ec4;outline-offset:-3px}
+@keyframes daub{from{transform:scale(1.6);opacity:0}to{transform:scale(1);opacity:1}}
+.bgside{flex:0 1 240px;display:grid;gap:10px}
+.bgstat{background:#0f1733;border:1px solid #23305e;border-radius:14px;padding:12px 16px;display:flex;align-items:baseline;gap:8px}
+.bgstat b{font-size:34px;font-weight:900}.bgstat b small{font-size:16px;color:var(--dim)}.bgstat span{color:var(--dim);font-weight:700}
+.bgstat.gold{border-color:#ffc82c;background:#2a2410}.bgstat.gold b,.bgstat.gold span{color:#ffc82c}
+.bgroll{background:#ffc82c;color:#15172b;border:0;border-radius:12px;padding:12px 16px;font-weight:900;font-size:16px;cursor:pointer}.bgroll:disabled{opacity:.5}
+tr.mine td{background:#2a2410}
+@media (max-width:560px){.bggrid{gap:4px}.bgsq{padding:2px;border-radius:7px}.bgcard{padding:6px}}
 .lvbug{margin:0 0 10px}.lvbug:empty{display:none}
 .lvbug{display:flex;justify-content:center;padding:26px 8px 12px;margin:0 0 10px;border-radius:14px;background:linear-gradient(180deg,transparent,#0008 40%,#000c)}
 .fbug{display:flex;align-items:center;gap:0;font-family:Archivo,system-ui,sans-serif;font-stretch:125%;max-width:100%}
@@ -904,7 +929,7 @@ ${FIELD_CSS}
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><a class="navlink" href="/locker">Locker Room</a></nav>
+<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><button data-t="bingo">Bingo</button><a class="navlink" href="/locker">Locker Room</a></nav>
 </div></header>
 <template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
@@ -1371,12 +1396,56 @@ function betsView() {
     + (done.length ? '<h3 class="past">Last 7 days</h3><div class="grid">' + done.map(card).join("") + "</div>" : "") + fightsHtml;
 }
 
+// ---------- Rams Bingo ----------
+let bingo = null, bingoBusy = false;
+function loadBingo(op) {
+  const key = myKey();
+  bingoBusy = true;
+  return fetch("/api/bingo", { method: key ? "POST" : "GET", headers: key ? { "Content-Type": "application/json" } : {}, body: key ? JSON.stringify({ t: key, op }) : undefined })
+    .then((r) => r.json()).then((d) => { bingo = d; bingoBusy = false; if (tab === "bingo") bingoView(); }).catch(() => { bingoBusy = false; });
+}
+setInterval(() => { if (tab === "bingo" && !document.hidden && bingo && bingo.locked) loadBingo(); }, 30000);
+const BLINES = [[0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23,24],[0,5,10,15,20],[1,6,11,16,21],[2,7,12,17,22],[3,8,13,18,23],[4,9,14,19,24],[0,6,12,18,24],[4,8,12,16,20]];
+function bingoView() {
+  sub.textContent = "Rams Bingo";
+  if (!bingo) { view.innerHTML = '<div class="empty">Shuffling cards...</div>'; loadBingo(); return; }
+  if (bingo.error) { view.innerHTML = '<div class="empty">' + esc(bingo.error) + '</div>'; return; }
+  const B = bingo, g = B.game, hits = B.hits || {};
+  const kick = new Date(g.kick), when = kick.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  sub.textContent = "Rams Bingo · " + g.name;
+  let html = '';
+  if (B.card) {
+    const on = (i) => B.card[i].id === "free" || !!hits[B.card[i].id];
+    const win = new Set(); let n = 0;
+    BLINES.forEach((l) => { if (l.every(on)) { n++; l.forEach((i) => win.add(i)); } });
+    const marked = B.card.filter((c, i) => i !== 12 && on(i)).length;
+    html += '<div class="bgwrap"><div class="bgcard"><div class="bghead">' + ["B", "I", "N", "G", "O"].map((c) => '<b>' + c + '</b>').join("") + '</div><div class="bggrid">'
+      + B.card.map((c, i) => '<div class="bgsq' + (c.id === "free" ? " free" : "") + (on(i) ? " hit" : "") + (win.has(i) ? " win" : "") + '"><span>' + esc(c.label) + '</span>' + (on(i) && c.id !== "free" ? '<i></i>' : "") + '</div>').join("")
+      + '</div></div><div class="bgside">'
+      + '<div class="bgstat"><b>' + marked + '<small>/24</small></b><span>marked</span></div><div class="bgstat' + (n ? " gold" : "") + '"><b>' + n + '</b><span>' + (n === 1 ? "BINGO!" : n ? "BINGOS!" : "bingos") + '</span></div>'
+      + (B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live game every minute.</p>'
+        : '<button class="bgroll" id="bgroll"' + (bingoBusy ? " disabled" : "") + '>🎲 Re-roll my card</button><p class="note">Re-roll as often as you want until kickoff (' + esc(when) + '). Then it locks.</p>')
+      + '</div></div>';
+  } else {
+    html += '<div class="empty">' + (B.expired ? "Your key expired. " : "") + 'Type <b>/bingo</b> in Discord and open the link to get your card for ' + esc(g.name) + '.</div>';
+  }
+  const board = B.board || [];
+  html += '<h3 class="past">Cards in play (' + board.length + ')</h3>' + (board.length ? '<table><thead><tr><th>#</th><th>Player</th><th>Marked</th><th>Bingos</th></tr></thead><tbody>'
+    + board.map((r, i) => '<tr' + (r.id === B.me ? ' class="mine"' : "") + '><td class="n">' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td class="n">' + r.marked + '/24</td><td class="n">' + (r.bingos ? "🎱 " + r.bingos : "0") + '</td></tr>').join("")
+    + '</tbody></table>' : '<div class="empty">Nobody has a card yet.</div>');
+  view.innerHTML = html;
+  const rb = document.getElementById("bgroll");
+  if (rb) rb.onclick = () => { rb.disabled = true; loadBingo("reroll"); };
+}
+
 function render() {
   cancelAnimationFrame(raf);
   if (tab !== "herd") herdHandler = null;
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
+  { const on = document.querySelector("nav button.on"); if (on) on.parentNode.scrollLeft = Math.max(0, on.offsetLeft - 40); }
   if (tab === "herd") { pasture(); if (!live) pollLive(); return; }
   if (tab === "bets") { betsView(); return; }
+  if (tab === "bingo") { bingoView(); return; }
   if (tab === "week") {
     if (!week) return;
     if (week.error) { view.innerHTML = '<div class="empty">Couldn\\'t load this week: ' + esc(week.error) + '</div>'; return; }
@@ -1401,7 +1470,11 @@ function render() {
   }
 }
 document.querySelectorAll("nav button").forEach((b) => b.onclick = () => { tab = b.dataset.t; history.replaceState(null, "", "#" + tab); render(); });
-if (["week", "last", "table", "herd", "bets"].includes(location.hash.slice(1))) tab = location.hash.slice(1);
+{ // links like #bingo&t=KEY carry a personal key: keep it in this browser, then drop it from the address bar
+  const hp = new URLSearchParams(location.hash.slice(1)), k = hp.get("t");
+  if (k) { try { localStorage.setItem("lr_t", k); } catch {} hp.delete("t"); history.replaceState(null, "", "#" + [...hp.keys()][0]); }
+}
+if (["week", "last", "table", "herd", "bets", "bingo"].includes(location.hash.slice(1))) tab = location.hash.slice(1);
 fetch("/api/week").then((r) => r.json()).then((d) => { week = d; if (tab === "week") render(); }).catch((e) => { week = {error: e.message}; render(); });
 render();
 fetch("/api/history").then((r) => r.json()).then((d) => { hist = d; if (tab === "last" || tab === "table") render(); }).catch(() => {});
