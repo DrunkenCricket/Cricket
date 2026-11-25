@@ -261,6 +261,8 @@ export async function handleSite(request, env, ctx) {
     if (ram[2]) return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=30" } });
     return new Response(ramPage(r?.name || "Ram", svg, look), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=30" } });
   }
+  if (pathname === "/npc/ref.svg") return new Response(renderRam({ bg: "none", shirt: "shirt_referee_tee", head: "head_ref_cap", neck: "neck_whistle", hand: "hand_flag_yellow", pose: "pose_point", feet: "feet_cleat_black" }, 512, "css"),
+    { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=3600" } });
   const fm = pathname.match(/^\/fight\/(\d+)$/);
   if (fm && env.GAME) {
     const f = await env.GAME.get(env.GAME.idFromName("main")).fight(Number(fm[1]));
@@ -754,6 +756,12 @@ ${FIELD_CSS}
 @keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
 .pflag{position:absolute;font-size:44px;z-index:999;animation:toss .7s cubic-bezier(.3,1.5,.5,1)}
 @keyframes toss{from{transform:translate(-120px,-200px) rotate(-200deg);opacity:0}to{transform:none;opacity:1}}
+.confetti{position:absolute;top:-4%;width:9px;height:14px;z-index:1500;animation:fall linear forwards;pointer-events:none}
+@keyframes fall{from{transform:translateY(0) rotate(0)}to{transform:translateY(560px) rotate(720deg)}}
+.tdword{position:absolute;top:10%;transform:translateX(-50%);z-index:1600;font:900 clamp(26px,5vw,56px)/1 system-ui;color:#ffc82c;-webkit-text-stroke:2px #15172b;animation:pop .4s cubic-bezier(.2,1.4,.4,1);pointer-events:none}
+.pflag{width:46px;height:46px;margin:-23px;z-index:980;animation:none;font-size:0}
+.rw img.mad{animation:shake .25s linear infinite}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+.madbub{position:absolute;left:50%;top:-6px;transform:translateX(-50%);font-size:26px;animation:pop .3s}
 .rw.me{cursor:default}.rw.me span{background:var(--gold);color:#111;box-shadow:0 0 0 2px #111}.rw.me span b{color:#111}
 .rw.me img{filter:drop-shadow(0 0 10px rgba(255,200,44,.9))}.pasture.field{cursor:crosshair}
 .note b{color:var(--gold)}.rw:hover span b{color:#111}
@@ -811,8 +819,10 @@ function connect() {
     if (herdHandler) herdHandler(m); };
   sock.onclose = () => setTimeout(connect, 5000);
 }
-const MOMENT = { flag: ["🟨", "FLAG!"], td: ["🏈", "TOUCHDOWN!"], touchdown: ["🏈", "TOUCHDOWN!"] };
+const MOMENT = { flag: ["🟨", "FLAG!"], refsplan: ["🟨", "REFS PLAN!"], td: ["🏈", "TOUCHDOWN!"], touchdown: ["🏈", "TOUCHDOWN!"] };
 function showMoment(m) {
+  if (m.fx !== false && herdHandler) herdHandler({ t: "fx", cmd: m.cmd });
+  if (!m.url) return;
   const [icon, title] = MOMENT[m.cmd] || ["🎉", "!" + m.cmd.toUpperCase()];
   const box = document.createElement("div"); box.className = "moment";
   box.innerHTML = (m.kind === "video" ? '<video autoplay muted loop playsinline src="' + esc(m.url) + '"></video>' : '<img alt="" src="' + esc(m.url) + '">')
@@ -821,7 +831,6 @@ function showMoment(m) {
   if (!stack) { stack = document.createElement("div"); stack.id = "moments"; document.body.appendChild(stack); }
   stack.appendChild(box);
   setTimeout(() => box.classList.add("gone"), 9000); setTimeout(() => box.remove(), 9600);
-  if (herdHandler) herdHandler({ t: "fx", cmd: m.cmd });
 }
 function myKey() { try { const t = localStorage.getItem("lr_t"); if (t && Number(t.split(".")[1]) * 1000 > Date.now()) return t; } catch {} return null; }
 function myId() {
@@ -862,18 +871,66 @@ function pasture() {
   };
   if (lastSnap) herdHandler(lastSnap);
   // !TD: the whole herd celebrates. !flag: a penalty flag lands on the field and everyone points.
+  // Field shows. !TD: the whole herd sprints to one end zone, fans out and celebrates under confetti.
+  // !flag / !refsplan: a ref jogs out, throws 9 yellow flags, and every ram points and fumes.
+  let showOn = false;
+  const PFLAG = '<svg viewBox="-34 -34 68 68" width="100%" height="100%"><path d="M -26 -18 C -14 -30, 10 -26, 24 -20 C 30 -4, 26 12, 18 22 C 0 28, -18 24, -28 14 C -32 2, -30 -8, -26 -18 Z" fill="#ffd400" stroke="#15172b" stroke-width="5"/><path d="M -12 -12 C -2 -2, 6 4, 14 8 M -18 6 C -8 8, 0 2, 4 -6" stroke="#0003" stroke-width="4" fill="none"/><circle cx="20" cy="18" r="8" fill="#ffd400" stroke="#15172b" stroke-width="4"/></svg>';
+  const pose = (i, p) => { sheep[i].img.src = "/ram/" + herd.rams[i].id + ".svg?bare" + (p ? "&pose=" + p : ""); };
+  const goTo = (s, x, y, speed) => { s.fx = { tx: x, ty: y, speed }; };
+  function endShow(ms, extra) {
+    setTimeout(() => {
+      sheep.forEach((s, i) => { s.fx = null; s.wait = rnd(0.2, 1.5); s.img.classList.remove("mad"); pose(i); });
+      pa.querySelectorAll(".fxbit").forEach((e) => e.remove());
+      if (extra) extra();
+      showOn = false;
+    }, ms);
+  }
   function fieldFx(cmd) {
-    const td = cmd === "td" || cmd === "touchdown", flag = cmd === "flag";
-    if (!td && !flag) return;
-    sheep.forEach((s, i) => { s.img.src = "/ram/" + herd.rams[i].id + ".svg?bare&pose=" + (td ? (i % 2 ? "pose_td" : "pose_roof") : "pose_point"); });
-    setTimeout(() => sheep.forEach((s, i) => { s.img.src = "/ram/" + herd.rams[i].id + ".svg?bare"; }), 7000);
-    if (flag) {
-      const f = document.createElement("div"); f.className = "pflag";
-      f.innerHTML = '<svg viewBox="-34 -34 68 68" width="56" height="56"><path d="M -26 -18 C -14 -30, 10 -26, 24 -20 C 30 -4, 26 12, 18 22 C 0 28, -18 24, -28 14 C -32 2, -30 -8, -26 -18 Z" fill="#ffd400" stroke="#15172b" stroke-width="5"/><path d="M -12 -12 C -2 -2, 6 4, 14 8 M -18 6 C -8 8, 0 2, 4 -6" stroke="#0003" stroke-width="4" fill="none"/><circle cx="20" cy="18" r="8" fill="#ffd400" stroke="#15172b" stroke-width="4"/></svg>';
-      f.style.left = (20 + Math.random() * 60) + "%"; f.style.top = (40 + Math.random() * 45) + "%"; pa.appendChild(f);
-      setTimeout(() => f.remove(), 7000);
+    if (showOn) return;
+    if (cmd === "td" || cmd === "touchdown") {
+      showOn = true;
+      const left = Math.random() < 0.5, ez = (a, b) => left ? rnd(a, b) : 100 - rnd(a, b);
+      sheep.forEach((s, i) => goTo(s, ez(4, 12), rnd(28, 94), rnd(20, 28)));   // sprint to the end zone
+      setTimeout(() => {   // fan out and celebrate
+        sheep.forEach((s, i) => { goTo(s, ez(4, 30), 28 + (i + 0.5) * (66 / sheep.length) + rnd(-3, 3), 7); pose(i, i % 3 === 0 ? "pose_roof" : i % 3 === 1 ? "pose_td" : "pose_hype"); });
+        for (let k = 0; k < 90; k++) {
+          const c = document.createElement("i"); c.className = "confetti fxbit";
+          c.style.left = (left ? rnd(0, 45) : rnd(55, 100)) + "%"; c.style.background = ["#ffc82c", "#1f55d6", "#fff", "#ff5ec4", "#5ee08f"][k % 5];
+          c.style.animationDelay = rnd(0, 2.5) + "s"; c.style.animationDuration = rnd(2.2, 4) + "s"; pa.appendChild(c);
+        }
+        const tdw = document.createElement("div"); tdw.className = "tdword fxbit"; tdw.textContent = "TOUCHDOWN!"; tdw.style.left = left ? "22%" : "78%"; pa.appendChild(tdw);
+      }, 2600);
+      endShow(11000);
+    }
+    if (cmd === "flag" || cmd === "refsplan") {
+      showOn = true;
+      const ref = { el: document.createElement("div") };
+      ref.el.className = "rw fxbit"; ref.el.innerHTML = '<img alt="" src="/npc/ref.svg"><span>REF</span>';
+      ref.el.style.left = "-6%"; ref.el.style.top = "60%"; ref.el.style.zIndex = 990; pa.appendChild(ref.el);
+      const refIn = ref.el.animate([{ left: "-6%" }, { left: "50%" }], { duration: 1800, easing: "ease-out", fill: "forwards" });
+      sheep.forEach((s) => { s.fx = { tx: s.x, ty: s.y, speed: 0 }; });   // everyone freezes
+      refIn.finished.then(() => {
+        for (let k = 0; k < 9; k++) setTimeout(() => {   // nine flags, one after another
+          const f = document.createElement("div"); f.className = "pflag fxbit";
+          f.innerHTML = PFLAG; pa.appendChild(f);
+          const tx = rnd(14, 86), ty = rnd(30, 92);
+          f.style.left = tx + "%"; f.style.top = ty + "%";
+          f.animate([{ transform: "translate(" + (50 - tx) * 9 + "px, " + (52 - ty) * 5 + "px) rotate(0) scale(.6)" },
+            { transform: "translate(" + (50 - tx) * 4.5 + "px, " + ((52 - ty) * 2.5 - 120) + "px) rotate(400deg) scale(1)", offset: 0.5 },
+            { transform: "translate(0,0) rotate(720deg) scale(1)" }], { duration: 700, easing: "ease-out" });
+          ref.el.firstChild.animate([{ transform: "rotate(0)" }, { transform: "rotate(-12deg)" }, { transform: "rotate(0)" }], { duration: 250 });
+        }, k * 260);
+        setTimeout(() => sheep.forEach((s, i) => {   // the herd loses it
+          pose(i, "pose_point"); s.img.classList.add("mad");
+          const m = document.createElement("b"); m.className = "madbub fxbit"; m.textContent = ["😠", "🤬", "😤", "‼️"][i % 4];
+          s.el.appendChild(m);
+        }), 900);
+      });
+      endShow(10500, () => {});
+      setTimeout(() => ref.el.animate([{ left: "50%" }, { left: "112%" }], { duration: 1500, easing: "ease-in", fill: "forwards" }), 8600);
     }
   }
+
   let lastSent = 0;
   const send = (x, y) => { if (sock && sock.readyState === 1 && you) sock.send(JSON.stringify({ t: "go", x: +x.toFixed(2), y: +y.toFixed(2) })); };
   if (you) pa.addEventListener("click", (e) => {
@@ -888,7 +945,10 @@ function pasture() {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     for (const s of sheep) {
       let moving = false;
-      if (s.me) {
+      if (s.fx) {   // field show in progress: go where the show says
+        const dx = s.fx.tx - s.x, dy = s.fx.ty - s.y, d = Math.hypot(dx, dy);
+        if (d > 0.3 && s.fx.speed) { const v = Math.min(1, s.fx.speed * dt / d); s.x += dx * v; s.y += dy * v; s.t += dt * 12; moving = true; }
+      } else if (s.me) {
         const kx = (keys.arrowright || keys.d ? 1 : 0) - (keys.arrowleft || keys.a ? 1 : 0);
         const ky = (keys.arrowdown || keys.s ? 1 : 0) - (keys.arrowup || keys.w ? 1 : 0);
         if (kx || ky) { s.x = clampX(s.x + kx * 14 * dt); s.y = clampY(s.y + ky * 14 * dt); s.tx = s.x; s.ty = s.y; moving = true;

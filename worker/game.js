@@ -136,7 +136,7 @@ export class Game extends DurableObject {
     if (this.ctx.getWebSockets().length) await this.ctx.storage.setAlarm(Date.now() + 15_000);
   }
   momentConfig() {
-    return { channels: JSON.parse(this.meta("momentChannels") || "{}"), triggers: JSON.parse(this.meta("momentTriggers") || '["flag","td","touchdown"]') };
+    return { channels: JSON.parse(this.meta("momentChannels") || "{}"), triggers: [...new Set(["flag", "td", "touchdown", "refsplan", ...JSON.parse(this.meta("momentTriggers") || "[]")])].filter((t) => !JSON.parse(this.meta("momentOff") || "[]").includes(t)) };
   }
   toggleMomentChannel(id) {
     const c = this.momentConfig().channels;
@@ -145,9 +145,11 @@ export class Game extends DurableObject {
     return c[id] !== undefined;
   }
   toggleTrigger(name) {
-    const t = this.momentConfig().triggers, n = name.toLowerCase().replace(/^!/, "");
-    const on = !t.includes(n);
-    this.meta("momentTriggers", JSON.stringify(on ? [...t, n] : t.filter((x) => x !== n)));
+    const n = name.toLowerCase().replace(/^!/, "");
+    const on = !this.momentConfig().triggers.includes(n);
+    const extra = JSON.parse(this.meta("momentTriggers") || "[]"), off = JSON.parse(this.meta("momentOff") || "[]");
+    this.meta("momentTriggers", JSON.stringify(on ? [...new Set([...extra, n])] : extra.filter((x) => x !== n)));
+    this.meta("momentOff", JSON.stringify(on ? off.filter((x) => x !== n) : [...new Set([...off, n])]));
     return { on, triggers: this.momentConfig().triggers };
   }
   static media(m) {
@@ -177,15 +179,28 @@ export class Game extends DurableObject {
       if (!msgs.length) continue;
       channels[ch] = msgs[msgs.length - 1].id;
       if (!after) continue;                         // first look at a channel: just mark the spot
-      let pending = null;
+      // a trigger plays the field animation right away; the GIF reply (if any) follows as a popup, even in a later poll
+      let pending = JSON.parse(this.meta(`momentPending:${ch}`) || "null");
       for (const m of msgs) {
         const ts = Date.parse(m.timestamp);
         const cmd = !m.author?.bot && (m.content || "").trim().match(/^!(\w+)/)?.[1]?.toLowerCase();
-        if (cmd && triggers.includes(cmd)) { pending = { cmd, by: m.member?.nick || m.author.global_name || m.author.username, ts }; continue; }
+        if (cmd && triggers.includes(cmd)) {
+          pending = { cmd, by: m.member?.nick || m.author.global_name || m.author.username, ts };
+          // one field show per type every 30 seconds, so spamming !TD doesn't stack shows
+          const group = ["flag", "refsplan"].includes(cmd) ? "flag" : cmd === "touchdown" ? "td" : cmd;
+          if (Date.now() - ts < 5 * 60_000 && Date.now() - Number(this.meta(`fxLast:${group}`) || 0) > 30_000) {
+            this.meta(`fxLast:${group}`, Date.now());
+            this.broadcast({ t: "moment", cmd, by: pending.by, at: ts, fx: true });
+          }
+          continue;
+        }
         if (pending && m.author?.bot && ts - pending.ts < 20_000) {
           const media = Game.media(m);
           if (media) {
-            const moment = { t: "moment", cmd: pending.cmd, by: pending.by, ...media, at: ts };
+            const moment = { t: "moment", cmd: pending.cmd, by: pending.by, ...media, at: ts, fx: false };
+            const pg = `gifLast:${pending.cmd}`;
+            if (Date.now() - Number(this.meta(pg) || 0) < 30_000) { pending = null; continue; }
+            this.meta(pg, Date.now());
             const recent = JSON.parse(this.meta("moments") || "[]");
             this.meta("moments", JSON.stringify([moment, ...recent].slice(0, 20)));
             this.broadcast(moment);
@@ -193,6 +208,7 @@ export class Game extends DurableObject {
           }
         }
       }
+      this.meta(`momentPending:${ch}`, JSON.stringify(pending && Date.now() - pending.ts < 60_000 ? pending : null));
     }
     this.meta("momentChannels", JSON.stringify(channels));
     return found;
