@@ -200,6 +200,29 @@ function playOut(p) {
     dd: p.start?.down ? p.start.shortDownDistanceText || "" : "", yds: p.statYardage ?? null,
     score: !!p.scoringPlay, turnover: !!p.isTurnover, team: p.start?.team?.id || team };
 }
+// yards from the Rams goal line for a play's start/end spot
+const absYd = (spot) => spot && spot.yardsToEndzone != null && spot.team?.id ? (spot.team.id === RAMS_ID ? 100 - spot.yardsToEndzone : spot.yardsToEndzone) : null;
+// drive chart kinds: run blue, pass green, lost yardage red, interception dashed red, penalty yellow
+function playKind(p) {
+  const t = (p.type?.text || "").toLowerCase();
+  if (/interception/.test(t)) return "int";
+  if (/sack/.test(t)) return "loss";
+  if (/penalty/.test(t)) return "pen";
+  if (/fumble/.test(t)) return p.isTurnover ? "int" : "rush";
+  if (/pass/.test(t)) return "pass";
+  if (/rush/.test(t)) return "rush";
+  return null;   // kickoffs, punts, kicks, timeouts: not drawn
+}
+const STAT_COLS = { passing: ["C/ATT", "YDS", "TD", "INT"], rushing: ["CAR", "YDS", "AVG", "TD"], receiving: ["REC", "YDS", "TD", "LONG"], defensive: ["TOT", "SACKS", "TFL", "PD"] };
+function boxStats(sum) {
+  return (sum.boxscore?.players || []).map((tp) => ({ id: tp.team?.id, abbr: tp.team?.abbreviation,
+    cats: Object.entries(STAT_COLS).map(([name, cols]) => {
+      const c = (tp.statistics || []).find((x) => x.name === name);
+      if (!c) return null;
+      const idx = cols.map((l) => c.labels.indexOf(l));
+      return { name, cols, rows: (c.athletes || []).slice(0, name === "defensive" ? 4 : 3).map((a) => ({ name: a.athlete?.displayName || "", num: a.athlete?.jersey || "", stats: idx.map((i) => i < 0 ? "" : a.stats[i]) })) };
+    }).filter((c) => c && c.rows.length) }));
+}
 async function liveData(ctx) {
   const ev = await ramsEvent(ctx);
   if (!ev) return { state: "none" };
@@ -213,6 +236,7 @@ async function liveData(ctx) {
   const drives = [...(dr.previous || []), ...(dr.current ? [dr.current] : [])];
   const flat = [];
   for (const d of drives) for (const p of d.plays || []) flat.push({ p, d });
+  out.stats = boxStats(sum);
   out.plays = flat.slice(-14).reverse().map(({ p, d }) => ({ ...playOut(p), abbr: d.team?.abbreviation || "" }));
   const last = flat[flat.length - 1];
   if (last && out.state !== "post") {   // where the ball is now
@@ -223,6 +247,14 @@ async function liveData(ctx) {
       const d = last.d;
       out.drive = { team, rams, ball, first, down: e.downDistanceText || e.shortDownDistanceText || "",
         summary: d.description || "", abbr: d.team?.abbreviation || "",
+        chart: (d.plays || []).map((p) => {
+          const kind = playKind(p), a = absYd(p.start); let b = absYd(p.end);
+          if (!kind || a == null) return null;
+          if (b == null) b = a;
+          if (/incomplet/i.test(p.type?.text || "")) b = a;
+          const dir = rams ? 1 : -1, gain = (b - a) * dir;
+          return { a, b, kind: kind === "int" || kind === "pen" ? kind : gain < 0 ? "loss" : kind, yds: kind === "int" ? null : Math.round(gain), inc: /incomplet/i.test(p.type?.text || "") };
+        }).filter(Boolean).slice(-12),
         start: d.start?.yardsToEndzone != null ? (rams ? 100 - d.start.yardsToEndzone : d.start.yardsToEndzone) : null };
     }
   }
@@ -789,17 +821,41 @@ td.n{font-variant-numeric:tabular-nums}
 .fight:hover{border-color:var(--gold)}.fight b{color:var(--gold)}.fight.expired,.fight.declined,.fight.cancelled{opacity:.55}.fight u{color:var(--gold)}
 h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacing:1px;margin:26px 0 10px}
 .pasture{height:560px}
-.lvbug{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#0b1430;border:1px solid #23305e;border-radius:14px;padding:8px 12px;margin:0 0 10px}
-.lvbug:empty{display:none}.lvbug .tm{display:flex;align-items:center;gap:6px;font-weight:800;font-size:18px}.lvbug .tm img{width:28px;height:28px}
-.lvbug .tm.pos::after{content:"🏈";font-size:13px}.lvbug .st{color:var(--gold);font-weight:800;margin-left:auto;font-size:14px}
-.lvbug .dn{background:#ffc82c;color:#15172b;border-radius:8px;padding:2px 8px;font-weight:900;font-size:13px}.lvbug .lvdot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;animation:blink 1s infinite}
+.lvbug{margin:0 0 10px}.lvbug:empty{display:none}
+.sbug{display:inline-flex;align-items:stretch;max-width:100%;border-radius:10px;overflow:hidden;background:#0a0f22;box-shadow:0 6px 20px #0008;border:1px solid #ffffff22;font-family:system-ui,sans-serif;position:relative}
+.sb-t{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 85%,#fff 15%),var(--c));color:#fff;position:relative;min-width:112px}
+.sb-t+.sb-t{border-left:2px solid #0a0f22}.sb-t img{width:30px;height:30px;filter:drop-shadow(0 1px 2px #0008)}
+.sb-t b{font-weight:900;font-size:17px;letter-spacing:1px}.sb-t .sc{margin-left:auto;font-weight:900;font-size:26px;font-variant-numeric:tabular-nums;text-shadow:0 2px 3px #0006}
+.sb-pos{position:absolute;left:0;right:0;bottom:0;height:4px;background:#ffc82c;box-shadow:0 0 8px #ffc82c}
+.sb-clk{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:4px 14px;background:#0a0f22;color:#fff;min-width:70px}
+.sb-clk b{font-size:13px;font-weight:900;letter-spacing:1px;color:#ffc82c}.sb-clk span{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+.sb-dd{display:flex;align-items:center;padding:0 14px;background:#ffc82c;color:#0a0f22;font-weight:900;font-size:15px;white-space:nowrap}
+.lvdot{position:absolute;top:5px;left:5px;z-index:2;width:7px;height:7px;border-radius:50%;background:#ff3b3b;animation:blink 1s infinite}
 @keyframes blink{50%{opacity:.2}}
-.lv-zone{position:absolute;top:0;bottom:0;z-index:1;pointer-events:none;opacity:.28;transition:left .8s,width .8s}
+.lvchart{position:absolute;inset:0;z-index:1100;pointer-events:none}
+.dc{position:absolute;height:12px;margin-top:-6px;border-radius:6px;box-shadow:0 1px 3px #0007}
+.dc em{position:absolute;top:50%;transform:translateY(-50%);font:800 11px/1 system-ui,sans-serif;font-style:normal;color:#fff;text-shadow:0 1px 2px #000;white-space:nowrap}
+.dc.r em{left:calc(100% + 9px)}.dc.l em{right:calc(100% + 9px)}
+.dc.r::after,.dc.l::after{content:"";position:absolute;top:50%;margin-top:-8px;border:8px solid transparent}
+.dc.r::after{left:100%;border-left-color:inherit;border-left-width:9px;border-right:0}.dc.l::after{right:100%;border-right-color:inherit;border-right-width:9px;border-left:0}
+.dc.rush{background:#2d7bff;border-color:#2d7bff}.dc.pass{background:#1fd16b;border-color:#1fd16b}.dc.loss{background:#ff3b3b;border-color:#ff3b3b}
+.dc.pen{background:#ffd400;border-color:#ffd400;height:6px;margin-top:-3px}
+.dc.int{background:none;border:3px dashed #ff3b3b;height:12px;box-shadow:none}.dc.int::after{display:none}
+.dc.dot{width:12px;height:12px;margin-left:-6px;border-radius:50%;background:none;border:3px solid #1fd16b}.dc.dot em{left:16px}
+.dc.dot.rush{border-color:#2d7bff}.dc.dot.int{border-style:dashed;border-color:#ff3b3b}
 .lv-los,.lv-fd{position:absolute;top:0;bottom:0;width:4px;margin-left:-2px;z-index:2;pointer-events:none;transition:left .8s}
 .lv-los{background:#2d7bff;box-shadow:0 0 8px #2d7bff}.lv-fd{background:#ffd400;box-shadow:0 0 8px #ffd400}
-.lv-ball{position:absolute;top:13%;z-index:1200;transform:translateX(-50%);transition:left .8s;pointer-events:none;text-align:center}
+.lv-ball{position:absolute;top:1%;z-index:1200;transform:translateX(-50%);transition:left .8s;pointer-events:none;text-align:center}
 .lv-ball i{display:block;width:44px;height:26px;margin:0 auto}.lv-ball b{display:inline-block;margin-top:3px;background:#15172b;color:#fff;border:2px solid #ffc82c;border-radius:8px;padding:1px 7px;font-size:12px;white-space:nowrap}
-.lvplays{margin-top:10px;display:grid;gap:6px}.lvplays:empty{display:none}
+.lvgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;align-items:start}.lvgrid[hidden]{display:none}
+@media (max-width:760px){.lvgrid{grid-template-columns:1fr}}
+.lvplays,.lvstats{display:grid;gap:6px}.lvgrid h3{margin:0 0 2px;font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+.lvtabs{display:flex;gap:6px}.lvtabs button{flex:1;background:#0f1733;color:#fff;border:1px solid #23305e;border-radius:10px;padding:6px;font-weight:800;cursor:pointer}
+.lvtabs button.on{background:#ffc82c;color:#15172b;border-color:#ffc82c}
+.lvst{width:100%;border-collapse:collapse;background:#0f1733;border:1px solid #23305e;border-radius:12px;overflow:hidden;font-size:13px}
+.lvst th{background:#16204a;color:var(--dim);font-weight:800;text-align:right;padding:5px 8px;font-size:11px;letter-spacing:.5px}
+.lvst th:first-child{text-align:left;color:#ffc82c;font-size:12px}.lvst td{padding:5px 8px;text-align:right;border-top:1px solid #1d2850;font-variant-numeric:tabular-nums}
+.lvst td:first-child{text-align:left;font-weight:700}.lvst td small{color:var(--dim);font-weight:500}
 .lvp{background:#0f1733;border:1px solid #23305e;border-radius:12px;padding:8px 12px;font-size:14px;line-height:1.35}
 .lvp small{display:block;color:var(--dim);font-size:12px;margin-bottom:2px}.lvp.sc{border-color:#ffc82c;background:#2a2410}.lvp.to{border-color:#ff5e5e}
 .lvp:first-child{border-width:2px}
@@ -905,34 +961,49 @@ function myId() {
 let live = null, liveSeen = null;
 const yx = (y) => 8 + Math.max(0, Math.min(100, y)) * 0.84;   // yards from the Rams goal line to field %
 const BALLSVG = '<svg viewBox="-20 -12 40 24" width="100%" height="100%"><ellipse rx="18" ry="10" fill="#8b4a22" stroke="#15172b" stroke-width="3"/><path d="M -7 0 L 7 0 M -4 -3 l 0 6 M 0 -3 l 0 6 M 4 -3 l 0 6" stroke="#fff" stroke-width="2"/></svg>';
+let liveSide = "14";
 function drawLive() {
   const bug = document.getElementById("lvbug");
   if (!bug) return;
   const L = live, el = (id) => document.getElementById(id);
-  ["lvzone", "lvlos", "lvfd", "lvball"].forEach((id) => { el(id).hidden = true; });
-  el("lvplays").innerHTML = "";
+  ["lvlos", "lvfd", "lvball"].forEach((id) => { el(id).hidden = true; });
+  el("lvchart").innerHTML = ""; el("lvplays").innerHTML = ""; el("lvstats").innerHTML = ""; el("lvgrid").hidden = true;
   if (!L || L.state === "none" || !L.teams || L.teams.length < 2) { bug.innerHTML = ""; return; }
   const away = L.teams.find((t) => !t.home) || L.teams[0], home = L.teams.find((t) => t.home) || L.teams[1];
-  const tm = (t) => '<span class="tm' + (L.state === "in" && L.drive && L.drive.team === t.id ? " pos" : "") + '">' + (t.logo ? '<img alt="" src="' + t.logo + '">' : "") + esc(t.abbr) + (L.state === "pre" ? "" : " " + esc(t.score)) + '</span>';
-  if (L.state === "pre") {
-    const when = new Date(L.date).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
-    bug.innerHTML = '<span class="dim">Next game</span>' + tm(away) + '<span class="dim">@</span>' + tm(home) + '<span class="st">' + esc(when) + '</span>';
-    return;
-  }
-  const d = L.drive;
-  bug.innerHTML = (L.state === "in" ? '<span class="lvdot"></span>' : "") + tm(away) + tm(home)
-    + (L.state === "in" && d && d.down ? '<span class="dn">' + esc(d.down) + '</span>' : "") + '<span class="st">' + esc(L.detail) + '</span>';
+  const d = L.drive, pre = L.state === "pre";
+  // broadcast-style bug: a color slab per team, then the clock block and the down & distance
+  const slab = (t) => '<div class="sb-t" style="--c:' + t.color + '">' + (t.logo ? '<img alt="" src="' + t.logo + '">' : "") + '<b>' + esc(t.abbr) + '</b>'
+    + (pre ? "" : '<span class="sc">' + esc(t.score) + '</span>') + (L.state === "in" && d && d.team === t.id ? '<i class="sb-pos"></i>' : "") + '</div>';
+  let clock = esc(L.detail), dd = "";
+  if (pre) clock = '<b>NEXT</b><span>' + esc(new Date(L.date).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })) + '</span>';
+  else if (L.state === "post") clock = '<b>FINAL</b>';
+  else { const part = L.detail.split(" - "); clock = '<b>' + esc(part[0] || "") + '</b>' + (part[1] ? '<span>' + esc(part[1]) + '</span>' : ""); if (d && d.down) dd = '<div class="sb-dd">' + esc(d.down) + '</div>'; }
+  bug.innerHTML = '<div class="sbug">' + (L.state === "in" ? '<i class="lvdot"></i>' : "") + slab(away) + slab(home) + '<div class="sb-clk">' + clock + '</div>' + dd + '</div>';
+  if (pre) return;
   if (L.state === "in" && d) {
-    const team = L.teams.find((t) => t.id === d.team);
-    if (d.start != null) { const z = el("lvzone"), a = Math.min(d.start, d.ball), b = Math.max(d.start, d.ball);
-      z.style.left = yx(a) + "%"; z.style.width = (yx(b) - yx(a)) + "%"; z.style.background = team ? team.color : "#fff"; z.hidden = false; }
     el("lvlos").style.left = yx(d.ball) + "%"; el("lvlos").hidden = false;
     if (d.first != null) { el("lvfd").style.left = yx(d.first) + "%"; el("lvfd").hidden = false; }
     const bl = el("lvball"); bl.style.left = yx(d.ball) + "%"; bl.firstChild.innerHTML = BALLSVG;
     bl.lastChild.textContent = (d.rams ? "▶ " : "◀ ") + (d.abbr || "") + (d.down ? " · " + d.down : ""); bl.hidden = false;
+    // drive chart: one bar per snap, start spot to end spot
+    el("lvchart").innerHTML = (d.chart || []).map((c, i) => {
+      const x0 = yx(Math.min(c.a, c.b)), w = Math.abs(yx(c.b) - yx(c.a)), top = 14 + i * 5.4, fwd = c.b >= c.a;
+      const lbl = c.inc ? "INC" : c.kind === "int" ? "INT" : c.kind === "pen" ? "PEN " + (c.yds > 0 ? "+" : "") + c.yds : (c.yds > 0 ? "+" : "") + c.yds;
+      if (c.inc || w < 0.4) return '<div class="dc dot ' + c.kind + '" style="left:' + yx(c.a) + '%;top:' + top + '%"><em>' + lbl + '</em></div>';
+      return '<div class="dc ' + c.kind + (fwd ? " r" : " l") + '" style="left:' + x0 + '%;width:' + w + '%;top:' + top + '%"><em>' + lbl + '</em></div>';
+    }).join("");
   }
-  el("lvplays").innerHTML = (L.plays || []).slice(0, 10).map((p) => '<div class="lvp' + (p.score ? " sc" : p.turnover ? " to" : "") + '"><small>'
+  el("lvgrid").hidden = false;
+  el("lvplays").innerHTML = '<h3>Play-by-play</h3>' + (L.plays || []).slice(0, 8).map((p) => '<div class="lvp' + (p.score ? " sc" : p.turnover ? " to" : "") + '"><small>'
     + esc((p.q ? "Q" + p.q + " " : "") + p.clock + " · " + (p.abbr || "") + (p.dd ? " · " + p.dd : "") + (p.type ? " · " + p.type : "")) + '</small>' + esc(p.text) + '</div>').join("");
+  const st = L.stats || [];
+  if (!st.length) { el("lvstats").innerHTML = '<h3>Player stats</h3><div class="dim">No stats yet.</div>'; return; }
+  const side = st.find((t) => t.id === liveSide) || st[0];
+  const NAMES = { passing: "Passing", rushing: "Rushing", receiving: "Receiving", defensive: "Defense" };
+  el("lvstats").innerHTML = '<div class="lvtabs">' + st.slice().sort((a) => a.id === "14" ? -1 : 1).map((t) => '<button data-side="' + t.id + '" class="' + (t === side ? "on" : "") + '">' + esc(t.abbr) + '</button>').join("") + '</div>'
+    + side.cats.map((c) => '<table class="lvst"><tr><th>' + NAMES[c.name] + '</th>' + c.cols.map((h) => '<th>' + esc(h) + '</th>').join("") + '</tr>'
+      + c.rows.map((r) => '<tr><td>' + esc(r.name) + (r.num ? ' <small>#' + esc(r.num) + '</small>' : "") + '</td>' + r.stats.map((v) => '<td>' + esc(v) + '</td>').join("") + '</tr>').join("") + '</table>').join("");
+  el("lvstats").querySelectorAll("[data-side]").forEach((b) => b.onclick = () => { liveSide = b.dataset.side; drawLive(); });
 }
 // a fresh big play on the real field sets the herd off
 function liveReact(plays) {
@@ -963,8 +1034,8 @@ function pasture() {
   const note = mine ? "<b>Your ram has the gold tag.</b> Click anywhere on the field to walk there, or use the arrow keys / WASD. Everyone watching sees you move."
     : "Click a ram to see its gear. Want to drive your own? Run <b>/lockeroom</b> in Discord, open the link once, then come back here.";
   view.innerHTML = '<p class="note">' + note + '</p><div class="lvbug" id="lvbug"></div><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML
-    + '<div class="lv-zone" id="lvzone" hidden></div><div class="lv-los" id="lvlos" hidden></div><div class="lv-fd" id="lvfd" hidden></div><div class="lv-ball" id="lvball" hidden><i></i><b></b></div>'
-    + '</div><div class="lvplays" id="lvplays"></div>';
+    + '<div class="lvchart" id="lvchart"></div><div class="lv-los" id="lvlos" hidden></div><div class="lv-fd" id="lvfd" hidden></div><div class="lv-ball" id="lvball" hidden><i></i><b></b></div>'
+    + '</div><div class="lvgrid" id="lvgrid" hidden><div class="lvplays" id="lvplays"></div><div class="lvstats" id="lvstats"></div></div>';
   drawLive();
   // Windows/Mac "reduce motion" settings only tone this down (no trotting bounce, no sprints); the rams still roam.
   const pa = document.getElementById("pa"), calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
