@@ -510,6 +510,7 @@ h1{margin:0;font:900 clamp(24px,5vw,40px)/1 system-ui,sans-serif;letter-spacing:
 .room .drip{animation:drip .5s linear infinite}@keyframes drip{to{stroke-dashoffset:-40}}
 .room .steam{opacity:.18;animation:steam 7s ease-in-out infinite}@keyframes steam{0%,100%{transform:translateY(0);opacity:.12}50%{transform:translateY(-24px);opacity:.3}}
 .showerram{position:absolute;width:min(17vw,150px);z-index:1;transform:translateX(-50%)}
+@media (max-width:900px){#showers{display:none}}   /* phones and tablets crop the scene to the lockers; the shower guests stay home */
 .showerram img{width:100%;display:block;animation:sway 3.4s ease-in-out infinite}@keyframes sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
 .bub{position:absolute;border:2px solid #fffc;border-radius:50%;z-index:3;animation:bub 4s linear infinite;pointer-events:none}
 @keyframes bub{from{transform:translateY(0);opacity:.9}to{transform:translateY(-120px);opacity:0}}
