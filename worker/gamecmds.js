@@ -98,9 +98,11 @@ export async function gameCommand(i, env, ctx) {
     case "bingo": {
       await g.user(uid, name);
       const bg = await g.bingoGame();
+      // deal both cards now (Rams + Rest of NFL); the Sleeper lookups finish after Discord gets its reply
+      ctx?.waitUntil?.(Promise.all([g.bingo(uid, name, null, "rams"), g.bingo(uid, name, null, "nfl")]).catch((e) => console.log("bingo deal", e)));
       const hours = bg ? Math.max(24, Math.ceil((bg.ends - Date.now()) / 3600_000)) : 24;   // good for the whole game week
       const link = `${SITE}/#bingo&t=${await lockerToken(env, uid, hours)}`;
-      return msg({ content: `🎱 **Rams Bingo**${bg ? ` (${bg.name})` : ""}: re-roll your card as often as you like until kickoff, then it locks and marks itself live from the game. **Any bingo pays ${BINGO_CRATES} crates, a blackout ${BLACKOUT_CRATES}.** This link is yours for the game week.`,
+      return msg({ content: `🎱 **Rams Bingo**${bg ? ` (${bg.name})` : ""}: you get two cards: the **Rams card** and a **Rest of NFL card** (prop bets from every other game this week). Re-roll either one as often as you like until its first kickoff, then it locks and marks itself live. **Any bingo pays ${BINGO_CRATES} crates, a blackout ${BLACKOUT_CRATES}.** This link is yours for the game week.`,
         components: [{ type: 1, components: [{ type: 2, style: 5, url: link, label: "Open my Bingo card", emoji: { name: "🎱" } }] }] }, true);
     }
 

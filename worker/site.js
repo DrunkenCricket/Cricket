@@ -1429,7 +1429,13 @@ function bingoView() {
   sub.textContent = nfl ? "Rest of NFL Bingo" : "Rams Bingo";
   const tabs = '<div class="bgtabs"><button data-k="rams" class="' + (nfl ? "" : "on") + '">🐏 Rams card</button><button data-k="nfl" class="' + (nfl ? "on" : "") + '">🏈 Rest of NFL card</button></div>';
   const wire = () => view.querySelectorAll("[data-k]").forEach((b) => b.onclick = () => { bingoKind = b.dataset.k; bingo = bingoCache[bingoKind] || null; bingoView(); });
-  if (!bingo) { view.innerHTML = tabs + '<div class="empty">Shuffling cards...</div>'; wire(); loadBingo(); return; }
+  if (!bingo) {
+    view.innerHTML = tabs + '<div class="empty">Shuffling cards...</div>'; wire(); loadBingo();
+    // deal the other card too, so everyone with a key holds both
+    const other = nfl ? "rams" : "nfl";
+    if (myKey() && !bingoCache[other]) { const k = bingoKind; bingoKind = other; loadBingo(); bingoKind = k; }
+    return;
+  }
   if (bingo.error) { view.innerHTML = tabs + '<div class="empty">' + esc(bingo.error) + '</div>'; wire(); return; }
   const B = bingo, g = B.game, hits = B.hits || {};
   const kick = new Date(B.lockAt || g.kick), when = kick.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
