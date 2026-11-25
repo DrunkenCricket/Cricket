@@ -20,7 +20,7 @@ export { Game } from "./game.js";
 export default {
   async fetch(request, env, ctx) {
     if (new URL(request.url).pathname === "/ws/herd") return env.GAME.get(env.GAME.idFromName("main")).fetch(request);
-    if (request.method === "GET" || new URL(request.url).pathname.startsWith("/api/locker")) return handleSite(request, env, ctx);
+    if (request.method === "GET" || /^\/api\/(locker|bingo)/.test(new URL(request.url).pathname)) return handleSite(request, env, ctx);
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
     const body = await request.text();
     if (!(await verify(request, body))) return new Response("Bad signature", { status: 401 });

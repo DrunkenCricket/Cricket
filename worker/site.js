@@ -397,6 +397,16 @@ const FIELD = `<div class="ez l"><b>RAMS</b></div><div class="ez r"><b>HERD</b><
   + Array.from({ length: 11 }, (_, i) => `<div class="yl" style="left:${8 + i * 8.4}%"></div>`).join("")
   + [10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, i) => `<div class="num" style="left:${16.4 + i * 8.4}%">${n}</div>`).join("");
 
+// The site's top bar for pages outside the tabbed app (the Locker Room), so the tabs are always one click away.
+const TOPBAR_CSS = `.tb{background:linear-gradient(135deg,#003594,#001a4d);padding:22px 16px 0;border-bottom:3px solid #ffa300;font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.tb .w{max-width:1100px;margin:0 auto}.tb .t{margin:0 0 14px;font:700 28px/1.2 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:.5px;color:#e8ebf0}.tb .t span{color:#ffa300}
+.tb nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}.tb nav::-webkit-scrollbar{display:none}
+.tb nav a{white-space:nowrap;flex:0 0 auto;color:#c9d3ea;font-weight:600;padding:10px 16px;text-decoration:none;border-radius:10px 10px 0 0}.tb nav a:hover{color:#ffa300}
+.tb nav a.on{background:var(--bg);color:#ffa300}@media (max-width:560px){.tb .t{font-size:22px}.tb nav a{padding:10px}}`;
+const TOPBAR = (on) => `<header class="tb"><div class="w"><div class="t">RAMS <span>PICK'EM</span></div><nav>`
+  + [["/#week", "This Week"], ["/#last", "Last Week"], ["/#table", "Standings"], ["/#bets", "Bets &amp; Fights"], ["/#herd", "Herd"], ["/#bingo", "Bingo"], ["/locker", "Locker Room"]]
+    .map(([h, l]) => `<a href="${h}"${h === on ? ' class="on"' : ""}>${l}</a>`).join("") + `</nav></div></header>`;
+
 // ---------- The Locker Room scene (1000 x 470): lockers with gear on the left, the shower in the back right ----------
 const SC_OUT = "#15172b";
 function lockerScene() {
@@ -469,8 +479,9 @@ function lockerPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Locker Room</title><meta name="robots" content="noindex">
 <style>:root{--bg:#0b1024;--card:#151d3b;--card2:#1c2650;--line:#26315f;--ink:#eef2ff;--dim:#9aa6c7;--gold:#ffc82c;--blue:#003594}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,sans-serif;padding:16px}
-main{max-width:1100px;margin:0 auto}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}
+${TOPBAR_CSS}
 h1{margin:0;font:900 clamp(24px,5vw,40px)/1 system-ui,sans-serif;letter-spacing:2px}h1 span{color:var(--gold)}
 .sub{color:var(--dim);margin:6px 0 14px}.sub b{color:var(--gold)}
 /* the room: a wall of lockers, a bench, a floor */
@@ -514,7 +525,7 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 .it.locked{opacity:.4;cursor:default;filter:grayscale(.6)}.chips small{color:var(--dim);font-weight:500}
 .err{color:#ff8080}.empty{color:var(--dim);padding:24px;text-align:center}a{color:var(--gold)}
 </style></head>
-<body><main><h1>THE <span>LOCKER ROOM</span></h1><div class="sub" id="sub">Loading...</div>
+<body>${TOPBAR("/locker")}<main><h1>THE <span>LOCKER ROOM</span></h1><div class="sub" id="sub">Loading...</div>
 <div class="room" id="room">${lockerScene()}<div id="showers"></div>${lockerFront()}
 <div class="lr-ram" id="ram"><img alt="Your ram"></div>
 <div class="crate" id="crate"><svg viewBox="0 0 170 150" overflow="visible">
@@ -1402,7 +1413,8 @@ function loadBingo(op) {
   const key = myKey();
   bingoBusy = true;
   return fetch("/api/bingo", { method: key ? "POST" : "GET", headers: key ? { "Content-Type": "application/json" } : {}, body: key ? JSON.stringify({ t: key, op }) : undefined })
-    .then((r) => r.json()).then((d) => { bingo = d; bingoBusy = false; if (tab === "bingo") bingoView(); }).catch(() => { bingoBusy = false; });
+    .then((r) => r.json()).then((d) => { bingo = d; bingoBusy = false; if (tab === "bingo") bingoView(); })
+    .catch(() => { bingoBusy = false; if (!bingo) bingo = { error: "Couldn't load Bingo. Refresh to try again." }; if (tab === "bingo") bingoView(); });
 }
 setInterval(() => { if (tab === "bingo" && !document.hidden && bingo && bingo.locked) loadBingo(); }, 30000);
 const BLINES = [[0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23,24],[0,5,10,15,20],[1,6,11,16,21],[2,7,12,17,22],[3,8,13,18,23],[4,9,14,19,24],[0,6,12,18,24],[4,8,12,16,20]];
