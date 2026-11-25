@@ -1443,7 +1443,7 @@ function bingoView() {
     html += '<div class="bgwrap"><div class="bgcard"><div class="bghead">' + ["B", "I", "N", "G", "O"].map((c) => '<b>' + c + '</b>').join("") + '</div><div class="bggrid">'
       + B.card.map((c, i) => '<div class="bgsq' + (c.id === "free" ? " free" : "") + (on(i) ? " hit" : "") + (win.has(i) ? " win" : "") + '">'
         + (c.team ? '<img class="bglogo" alt="" src="https://a.espncdn.com/i/teamlogos/nfl/500/' + ({ WAS: "wsh" }[c.team] || c.team.toLowerCase()) + '.png">' : "")
-        + '<span>' + esc(c.team ? c.label.replace(/ \([A-Z]{2,3}\)$/, "") : c.label) + '</span>' + (on(i) && c.id !== "free" ? '<i></i>' : "") + '</div>').join("")
+        + '<span>' + esc(c.team ? c.label.replace(/ [(][A-Z]{2,3}[)]$/, "") : c.label) + '</span>' + (on(i) && c.id !== "free" ? '<i></i>' : "") + '</div>').join("")
       + '</div></div><div class="bgside">'
       + '<div class="bgstat"><b>' + marked + '<small>/24</small></b><span>marked</span></div><div class="bgstat' + (n ? " gold" : "") + '"><b>' + n + '</b><span>' + (n === 1 ? "BINGO!" : n ? "BINGOS!" : "bingos") + '</span></div>'
       + '<div class="bgstat' + (n ? " gold" : "") + '"><b>\u{1F381}</b><span>' + (marked === 24 ? "BLACKOUT! " + (B.blackout || 10) + " crates are yours" : n ? (B.crates || 5) + " crates are yours. A blackout makes it " + (B.blackout || 10) : "Any bingo pays " + (B.crates || 5) + " crates. A blackout pays " + (B.blackout || 10)) + '</span></div>'
