@@ -106,7 +106,7 @@ export async function gameCommand(i, env, ctx) {
             line("/equip", "wear an item"), line("/unequip", "take one off"), line("/body", "thin, medium or large"), line("/skin", "pick a skin tone (free)"), line("/inventory", "everything you own"), line("/ram", "show off a ram")].join("\n") },
           { name: "🎲 Bets & fights", value: [line("/bet", `post a random player bet: ${PROP_COST} RUTS to pick hits or misses, the right side wins a crate`), line("/prop cancel", "cancel a bet you posted"),
             line("/prop check", "settle finished bets now"), line("/fight", `challenge a ram: ${FIGHT_STAKE} RUTS each, winner takes all`)].join("\n") },
-          { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "show !flag / !TD GIFs on the website")].join("\n") },
+          { name: "🛡️ Mods", value: [line("/giveruts", "give RUTS to one person or everyone"), line("/moments", "field shows on the website: !TD !flag !refsplan !int !fumble !itsgood !tutu")].join("\n") },
           { name: "🌐 Website", value: `[Pick'em, Bets & Fights, Herd, Lockeroom](${SITE})` },
         ],
       }] });

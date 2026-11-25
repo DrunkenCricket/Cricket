@@ -822,7 +822,7 @@ function connect() {
     if (herdHandler) herdHandler(m); };
   sock.onclose = () => setTimeout(connect, 5000);
 }
-const MOMENT = { flag: ["🟨", "FLAG!"], refsplan: ["🟨", "REFS PLAN!"], int: ["🫳", "INTERCEPTION!"], fumble: ["🏈", "FUMBLE!"], itsgood: ["🥅", "IT'S GOOD!"], td: ["🏈", "TOUCHDOWN!"], touchdown: ["🏈", "TOUCHDOWN!"] };
+const MOMENT = { flag: ["🟨", "FLAG!"], refsplan: ["🟨", "REFS PLAN!"], int: ["🫳", "INTERCEPTION!"], fumble: ["🏈", "FUMBLE!"], itsgood: ["🥅", "IT'S GOOD!"], tutu: ["🏃", "TUTU TO THE HOUSE!"], td: ["🏈", "TOUCHDOWN!"], touchdown: ["🏈", "TOUCHDOWN!"] };
 function showMoment(m) {
   if (m.fx !== false && herdHandler) herdHandler({ t: "fx", cmd: m.cmd });
   if (!m.url) return;
@@ -902,18 +902,43 @@ function pasture() {
       { left: b.x + "%", top: b.y + "%", transform: "rotate(1080deg) scale(1)" }], { duration: ms, easing: "linear" }).finished.then(() => f);
   }
   const handOf = (s) => ({ x: s.x + 2, y: s.y - 9 });
+  // Before every show the herd clears out and gets set: everyone jogs to a spot,
+  // arriving together, then holds a beat before the play starts.
+  const LINEUP = 2600, HOLD = 700;
+  const setAt = (s, x, y) => { s.fx = { tx: x, ty: y, speed: Math.max(4, Math.hypot(x - s.x, y - s.y) / (LINEUP / 1000 - 0.3)) }; };
+  const spread = (n, k, a, b) => n <= 1 ? (a + b) / 2 : a + k * (b - a) / (n - 1);
+  // a column of rams; a big herd stacks extra rows behind it (dx) instead of piling on top of each other
+  const col = (ids, x, y0 = 30, y1 = 92, dx = -6) => { const per = 8;
+    for (let c = 0; c * per < ids.length; c++) { const part = ids.slice(c * per, c * per + per);
+      part.forEach((i, k) => setAt(sheep[i], x + c * dx, spread(part.length, k, y0, y1) + (c % 2) * 3)); } };
+  const row = (ids, y, x0 = 18, x1 = 82) => ids.forEach((i, k) => setAt(sheep[i], spread(ids.length, k, x0, x1), y));
+  const sidelines = (ids) => { row(ids.filter((_, k) => k % 2 === 0), 26); row(ids.filter((_, k) => k % 2 === 1), 95); };
+  const shuffled = () => sheep.map((_, i) => i).sort(() => Math.random() - 0.5);
   function fieldFx(cmd) {
-    if (showOn) return;
-    if (cmd === "int") {   // offense throws, defense picks it off and takes it back
-      showOn = true;
-      const order = sheep.map((_, i) => i).sort(() => Math.random() - 0.5);
+    if (showOn || !sheep.length) return;
+    const play = SHOWS[cmd === "touchdown" ? "td" : cmd === "refsplan" ? "flag" : cmd];
+    if (!play) return;
+    showOn = true;
+    sheep.forEach((s, i) => { s.img.classList.remove("mad"); pose(i); });
+    const go = play();   // positions the herd and returns the play itself
+    setTimeout(go, LINEUP + HOLD);
+  }
+  const SHOWS = {
+    int() {   // offense lines up on the ball, QB in the pocket; defense across with a safety deep
+      const order = shuffled();
       const off = order.filter((_, k) => k % 2 === 0), def = order.filter((_, k) => k % 2 === 1);
-      off.forEach((i, k) => goTo(sheep[i], rnd(18, 38), 28 + (k + 0.5) * (66 / off.length), 14));
-      def.forEach((i, k) => goTo(sheep[i], rnd(60, 80), 28 + (k + 0.5) * (66 / Math.max(1, def.length)), 14));
-      word("OFFENSE", 28); word("DEFENSE", 72);
+      if (!def.length) def.push(off.pop());
+      const qbI = off[0], pickI = def[0], line = off.slice(1), dline = def.slice(1);
+      setAt(sheep[qbI], 33, 62); setAt(sheep[pickI], 74, 62);
+      col(line, 44, 34, 90, -6); col(dline, 56, 34, 90, 6);
+      word("OFFENSE", 30); word("DEFENSE", 70);
+      return () => SHOWS.intPlay(off, def, line, dline);
+    },
+    intPlay(off, def, line, dline) {
+      const qb = sheep[off[0]], pick = sheep[def[0]];
+      line.forEach((i) => goTo(sheep[i], 48, sheep[i].y, 3));    // the line pushes at the snap
+      dline.forEach((i) => goTo(sheep[i], 52, sheep[i].y, 3));
       setTimeout(() => {
-        const qb = sheep[off[0]], pick = sheep[def[0] ?? off[1]];
-        if (!pick) return;
         pose(off[0], "pose_wave");
         throwBall(handOf(qb), handOf(pick), 1300, 24).then((ball) => {
           ball.remove(); pose(def[0], "pose_fist");
@@ -924,19 +949,21 @@ function pasture() {
           off.forEach((i) => pose(i, "pose_shrug"));
           setTimeout(() => { def.forEach((i, k) => pose(i, k % 2 ? "pose_roof" : "pose_td")); confetti(0, 35, 50); }, 2800);
         });
-      }, 2400);
-      endShow(11000);
-    }
-    if (cmd === "fumble") {   // two rams collide, the ball pops loose, everybody scrambles
-      showOn = true;
-      const [ci, hi] = sheep.map((_, i) => i).sort(() => Math.random() - 0.5);
-      const carrier = sheep[ci], hitter = sheep[hi];
-      if (!hitter) { showOn = false; return; }
-      sheep.forEach((s, i) => { if (i !== ci && i !== hi) s.fx = { tx: s.x, ty: s.y, speed: 0 }; });
-      goTo(carrier, 38, 62, 18); goTo(hitter, 62, 62, 18);
+      }, 600);
+      endShow(9000);
+    },
+    fumble() {   // everyone clears to the sidelines; carrier and hitter square up in the middle
+      const [ci, hi, ...rest] = shuffled();
+      if (hi === undefined) return () => { showOn = false; sheep.forEach((s) => { s.fx = null; }); };
+      sidelines(rest);
+      setAt(sheep[ci], 26, 62); setAt(sheep[hi], 74, 62);
       const ball = document.createElement("div"); ball.className = "fball held fxbit"; ball.innerHTML = BALL; pa.appendChild(ball);
-      const follow = setInterval(() => { const h = handOf(carrier); ball.style.left = h.x + "%"; ball.style.top = h.y + "%"; }, 30);
-      setTimeout(() => { goTo(carrier, 47, 62, 30); goTo(hitter, 53, 62, 30); }, 1700);   // charge
+      const follow = setInterval(() => { const h = handOf(sheep[ci]); ball.style.left = h.x + "%"; ball.style.top = h.y + "%"; }, 30);
+      return () => SHOWS.fumblePlay(ci, hi, ball, follow);
+    },
+    fumblePlay(ci, hi, ball, follow) {
+      const carrier = sheep[ci], hitter = sheep[hi];
+      goTo(carrier, 47, 62, 26); goTo(hitter, 53, 62, 26);   // charge
       setTimeout(() => {
         clearInterval(follow); ball.remove();
         const boom = document.createElement("div"); boom.className = "boomfx fxbit"; boom.textContent = "💥"; boom.style.left = "50%"; boom.style.top = "52%"; pa.appendChild(boom);
@@ -950,19 +977,22 @@ function pasture() {
           const winner = Math.floor(Math.random() * sheep.length);
           setTimeout(() => { goTo(sheep[winner], spot.x, spot.y, 30); b.remove(); pose(winner, "pose_td"); word("RECOVERED!", spot.x); }, 2600);
         });
-      }, 2500);
-      endShow(10000);
-    }
-    if (cmd === "itsgood") {   // field goal: kicker boots it right down the middle of the uprights
-      showOn = true;
+      }, 900);
+      endShow(8000);
+    },
+    itsgood() {   // kicker sets up behind the ball, a wall of blockers in front, everyone else on the sidelines
       const post = document.createElement("div"); post.className = "goalpost fxbit";
       post.innerHTML = '<svg viewBox="0 0 120 200" width="100%" height="100%"><path d="M 60 200 L 60 110" stroke="#15172b" stroke-width="14"/><path d="M 60 200 L 60 110" stroke="#ffd400" stroke-width="8"/><path d="M 14 110 L 106 110 M 14 110 L 14 6 M 106 110 L 106 6" stroke="#15172b" stroke-width="14" stroke-linecap="round"/><path d="M 14 110 L 106 110 M 14 110 L 14 6 M 106 110 L 106 6" stroke="#ffd400" stroke-width="8" stroke-linecap="round"/></svg>';
       pa.appendChild(post);
-      const ki = Math.floor(Math.random() * sheep.length), kicker = sheep[ki];
-      sheep.forEach((s, i) => { if (i !== ki) goTo(s, rnd(14, 50), rnd(28, 94), 10); });
-      goTo(kicker, 40, 62, 14);
+      const [ki, ...rest] = shuffled(), kicker = sheep[ki];
+      const wall = rest.slice(0, 7), side = rest.slice(7);
+      col(wall, 54, 44, 80, 5); sidelines(side);
+      setAt(kicker, 38, 62);
       const tee = document.createElement("div"); tee.className = "fball fxbit"; tee.innerHTML = BALL; tee.style.left = "46%"; tee.style.top = "62%"; pa.appendChild(tee);
-      setTimeout(() => goTo(kicker, 45, 62, 18), 1600);
+      return () => SHOWS.kick(kicker, tee);
+    },
+    kick(kicker, tee) {
+      goTo(kicker, 45, 62, 14);
       setTimeout(() => {
         tee.remove();
         // through the middle: the uprights sit at x 86-96%, crossbar at ~44% from the top
@@ -972,12 +1002,16 @@ function pasture() {
           sheep.forEach((s, i) => pose(i, i % 2 ? "pose_td" : "pose_victory"));
           setTimeout(() => b.remove(), 320);
         });
-      }, 2100);
-      endShow(9500);
-    }
-    if (cmd === "td" || cmd === "touchdown") {
-      showOn = true;
-      const left = Math.random() < 0.5, ez = (a, b) => left ? rnd(a, b) : 100 - rnd(a, b);
+      }, 500);
+      endShow(7000);
+    },
+    td() {   // the herd lines up across the field, facing the end zone they're about to score in
+      const left = Math.random() < 0.5;
+      col(shuffled(), left ? 70 : 30, 30, 92, left ? 6 : -6);
+      return () => SHOWS.tdPlay(left);
+    },
+    tdPlay(left) {
+      const ez = (a, b) => left ? rnd(a, b) : 100 - rnd(a, b);
       sheep.forEach((s, i) => goTo(s, ez(4, 12), rnd(28, 94), rnd(20, 28)));   // sprint to the end zone
       setTimeout(() => {   // fan out and celebrate
         sheep.forEach((s, i) => { goTo(s, ez(4, 30), 28 + (i + 0.5) * (66 / sheep.length) + rnd(-3, 3), 7); pose(i, i % 3 === 0 ? "pose_roof" : i % 3 === 1 ? "pose_td" : "pose_hype"); });
@@ -989,9 +1023,45 @@ function pasture() {
         const tdw = document.createElement("div"); tdw.className = "tdword fxbit"; tdw.textContent = "TOUCHDOWN!"; tdw.style.left = left ? "22%" : "78%"; pa.appendChild(tdw);
       }, 2600);
       endShow(11000);
-    }
-    if (cmd === "flag" || cmd === "refsplan") {
-      showOn = true;
+    },
+    tutu() {   // backed up on our own 1: everyone sets on the left goal line, QB in the end zone
+      const [qbI, wrI, ...line] = shuffled();
+      if (wrI === undefined) return () => { showOn = false; sheep.forEach((s) => { s.fx = null; }); };
+      setAt(sheep[qbI], 8, 62); setAt(sheep[wrI], 15, 27);
+      col(line, 15, 40, 92, 5);
+      word("OWN 1", 20);
+      return () => SHOWS.tutuPlay(qbI, wrI, line);
+    },
+    tutuPlay(qbI, wrI, line) {
+      const qb = sheep[qbI], wr = sheep[wrI];
+      pa.querySelectorAll(".tdword").forEach((e) => e.remove());
+      goTo(wr, 94, 27, 19.6);                                     // the top receiver breaks away up the sideline, timed to meet the ball
+      line.forEach((i) => goTo(sheep[i], 19, sheep[i].y, 3));    // the line holds
+      setTimeout(() => {
+        pose(qbI, "pose_wave");
+        throwBall(handOf(qb), { x: 68, y: 18 }, 1500, 30).then((ball) => {   // deep ball, he runs under it
+          ball.remove();
+          const carry = document.createElement("div"); carry.className = "fball held fxbit"; carry.innerHTML = BALL; pa.appendChild(carry);
+          const follow = setInterval(() => { const h = handOf(wr); carry.style.left = h.x + "%"; carry.style.top = h.y + "%"; }, 30);
+          goTo(wr, 94, 27, 22);                                     // to the house
+          setTimeout(() => {
+            clearInterval(follow); carry.remove();
+            pose(wrI, "pose_td"); word("TOUCHDOWN!", 72); confetti(55, 100, 90);
+            [qbI, ...line].forEach((i, k) => {                      // the offense floods down to celebrate
+              goTo(sheep[i], 100 - rnd(4, 26), 30 + (k + 0.5) * (62 / (line.length + 1)), rnd(20, 28));
+              setTimeout(() => pose(i, k % 3 === 0 ? "pose_roof" : k % 3 === 1 ? "pose_hype" : "pose_victory"), 3000);
+            });
+          }, 1300);
+        });
+      }, 1100);
+      endShow(11500);
+    },
+    flag() {   // both sides set on the line of scrimmage, then the ref comes out
+      const order = shuffled();
+      col(order.filter((_, k) => k % 2 === 0), 43, 30, 92, -6); col(order.filter((_, k) => k % 2 === 1), 57, 30, 92, 6);
+      return () => SHOWS.flagPlay();
+    },
+    flagPlay() {
       const ref = { el: document.createElement("div") };
       ref.el.className = "rw fxbit"; ref.el.innerHTML = '<img alt="" src="/npc/ref.svg"><span>REF</span>';
       ref.el.style.left = "-6%"; ref.el.style.top = "60%"; ref.el.style.zIndex = 990; pa.appendChild(ref.el);
@@ -1016,8 +1086,8 @@ function pasture() {
       });
       endShow(10500, () => {});
       setTimeout(() => ref.el.animate([{ left: "50%" }, { left: "112%" }], { duration: 1500, easing: "ease-in", fill: "forwards" }), 8600);
-    }
-  }
+    },
+  };
 
   let lastSent = 0;
   const send = (x, y) => { if (sock && sock.readyState === 1 && you) sock.send(JSON.stringify({ t: "go", x: +x.toFixed(2), y: +y.toFixed(2) })); };
