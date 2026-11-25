@@ -533,7 +533,7 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 <p><a href="/">Pick'em</a> · <a href="/#herd">See the herd</a></p></main>
 <script>
 const M = ${JSON.stringify(meta).replace(/</g, "\\u003c")};
-// The key comes from /lockerroom in Discord. This browser remembers it until it expires, so the site's Locker Room tab works too.
+// The key comes from /locker in Discord. This browser remembers it until it expires, so the site's Locker Room tab works too.
 let T = new URLSearchParams(location.hash.slice(1)).get("t");
 try {
   if (T) localStorage.setItem("lr_t", T);
@@ -656,8 +656,8 @@ fetch("/api/herd").then((r) => r.json()).then((d) => {
     + Array.from({ length: 6 }, (_, k) => '<i class="bub" style="left:' + (72 + k * 4.5) + '%;bottom:' + (42 + (k % 3) * 4) + '%;width:' + (6 + k % 3 * 4) + 'px;height:' + (6 + k % 3 * 4) + 'px;animation-delay:-' + k * 0.7 + 's"></i>').join("");
 }).catch(() => {});
 if (!T) {
-  $("sub").innerHTML = "Locked. Type <b>/lockerroom</b> in Discord and click the button to get in. Your key works for 2 hours in this browser.";
-  $("buy").disabled = true; $("buy").textContent = "🔒 Run /lockerroom in Discord";
+  $("sub").innerHTML = "Locked. Type <b>/locker</b> in Discord and click the button to get in. Your key works for 2 hours in this browser.";
+  $("buy").disabled = true; $("buy").textContent = "🔒 Run /locker in Discord";
   $("ram").firstChild.src = "/ram/100000000000000000/bare~0.svg";
 } else call("state");
 </script></body></html>`;
@@ -904,7 +904,7 @@ ${FIELD_CSS}
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><a class="navlink" href="/lockerroom">Locker Room</a></nav>
+<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><a class="navlink" href="/locker">Locker Room</a></nav>
 </div></header>
 <template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
@@ -1048,7 +1048,7 @@ function pasture() {
   sub.textContent = herd.rams.length + " rams on the field";
   if (!herd.rams.length) { view.innerHTML = '<div class="empty">No rams yet. Open your first crate with /crate in Discord.</div>'; return; }
   const note = mine ? "<b>Your ram has the gold tag.</b> Click anywhere on the field to walk there, or use the arrow keys / WASD. Everyone watching sees you move."
-    : "Click a ram to see its gear. Want to drive your own? Run <b>/lockerroom</b> in Discord, open the link once, then come back here.";
+    : "Click a ram to see its gear. Want to drive your own? Run <b>/locker</b> in Discord, open the link once, then come back here.";
   view.innerHTML = '<p class="note">' + note + '</p><div class="lvbug" id="lvbug"></div><div class="pasture field" id="pa">' + document.getElementById("fieldtpl").innerHTML
     + '<div class="lvchart" id="lvchart"></div><div class="lv-los" id="lvlos" hidden></div><div class="lv-fd" id="lvfd" hidden></div><div class="lv-ball" id="lvball" hidden><i></i><b></b></div>'
     + '</div><div class="lvgrid" id="lvgrid" hidden><div class="lvplays" id="lvplays"></div><div class="lvstats" id="lvstats"></div></div>';
