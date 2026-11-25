@@ -225,7 +225,7 @@ function crateReply(r, uid) {
     `\n💰 ${r.user.points} RUTS  •  📦 ${r.user.crates} crate${r.user.crates === 1 ? "" : "s"} left  •  🎯 Rare+ in ${10 - (r.user.opened % 10)}`,
   ].filter(Boolean);
   const buttons = [];
-  if (!r.dupe) buttons.push({ type: 2, style: 1, custom_id: `equip:${it.id}`, label: "Equip it" });
+  buttons.push({ type: 2, style: 1, custom_id: `equip:${it.id}`, label: "Equip it", emoji: { name: "👕" } });   // dupes too: it's already theirs
   buttons.push({ type: 2, style: 2, custom_id: "crate", label: "Open a crate (free if you have one, else 60 RUTS)", emoji: { name: "📦" } });
   buttons.push({ type: 2, style: 5, url: `${SITE}/ram/${uid}`, label: "See the ram" });
   return msg({

@@ -159,16 +159,22 @@ async function historyData(env, ctx) {
     Object.assign(avatars, found);
     const who = (r) => ({ id: r.user_id, name: r.user_name, avatar: avatars[r.user_id] || avatarUrl(r.user_id, null) });
 
-    const games = {};
-    for (const r of rows.filter((r) => r.label === label)) {
-      const g = (games[r.event_id] ||= { game: r.game, winner: r.winner, rams: r.game.includes("LAR"), sides: {} });
-      (g.sides[r.pick] ||= []).push(who(r));
-    }
-    const gameList = Object.values(games).map((g) => {
-      const [away, home] = g.game.split(" @ ");
-      return { game: g.game, winner: g.winner, rams: g.rams,
-               sides: [away, home].map((abbr) => ({ abbr, logo: logo[abbr] || null, users: g.sides[abbr] || [] })) };
-    }).sort((a, b) => b.rams - a.rams);
+    // every graded week this season (the Pick'em tab's week selector), oldest first
+    const gamesFor = (lbl) => {
+      const games = {};
+      for (const r of rows.filter((r) => r.label === lbl)) {
+        const g = (games[r.event_id] ||= { game: r.game, winner: r.winner, rams: r.game.includes("LAR"), sides: {} });
+        (g.sides[r.pick] ||= []).push(who(r));
+      }
+      return Object.values(games).map((g) => {
+        const [away, home] = g.game.split(" @ ");
+        return { game: g.game, winner: g.winner, rams: g.rams,
+                 sides: [away, home].map((abbr) => ({ abbr, logo: logo[abbr] || null, users: g.sides[abbr] || [] })) };
+      }).sort((a, b) => b.rams - a.rams);
+    };
+    const labels = [...new Set(rows.map((r) => r.label))].sort((a, b) => order(a) - order(b));
+    const weeks = labels.map((l) => ({ label: l, games: gamesFor(l) }));
+    const gameList = gamesFor(label);
 
     const t = {};
     for (const r of rows) {
@@ -176,7 +182,7 @@ async function historyData(env, ctx) {
       r.correct === "1" ? p.w++ : p.l++;
     }
     const standings = Object.values(t).sort((a, b) => b.w - a.w || a.l - b.l);
-    return { season, label, games: gameList, standings };
+    return { season, label, games: gameList, weeks, standings };
   });
 }
 
@@ -405,7 +411,7 @@ const TOPBAR_CSS = `.tb{background:linear-gradient(135deg,#003594,#001a4d);paddi
 .tb nav a{white-space:nowrap;flex:0 0 auto;color:#c9d3ea;font-weight:600;padding:10px 16px;text-decoration:none;border-radius:10px 10px 0 0}.tb nav a:hover{color:#ffa300}
 .tb nav a.on{background:var(--bg);color:#ffa300}@media (max-width:560px){.tb .t{font-size:22px}.tb nav a{padding:10px}}`;
 const TOPBAR = (on) => `<header class="tb"><div class="w"><div class="t">RAMS <span>PICK'EM</span></div><nav>`
-  + [["/#week", "This Week"], ["/#last", "Last Week"], ["/#table", "Standings"], ["/#bets", "Bets &amp; Fights"], ["/#herd", "Herd"], ["/#bingo", "Bingo"], ["/locker", "Locker Room"]]
+  + [["/#week", "Pick'em"], ["/#table", "Standings"], ["/#bets", "Bets &amp; Fights"], ["/#herd", "Herd"], ["/#bingo", "Bingo"], ["/locker", "Locker Room"]]
     .map(([h, l]) => `<a href="${h}"${h === on ? ' class="on"' : ""}>${l}</a>`).join("") + `</nav></div></header>`;
 
 // ---------- The Locker Room scene (1000 x 470): lockers with gear on the left, the shower in the back right ----------
@@ -517,6 +523,8 @@ button.on{border-color:var(--gold);color:var(--gold)}button:disabled{opacity:.45
 .skins{display:inline-flex;gap:6px;align-items:center}.sk{width:28px;height:28px;padding:0;border-radius:50%;border:2px solid var(--line)}.sk.on{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
 .buy{background:var(--gold);color:#111;border:0;font-size:17px;padding:13px 22px;font-weight:800}
 .reveal{display:none;margin-left:auto;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-left:5px solid;border-radius:12px;padding:8px 12px}
+.reveal .eq{background:var(--gold);color:#111;border:0;font-weight:900;font-size:15px;padding:10px 16px;border-radius:10px;cursor:pointer;white-space:nowrap}
+.reveal .eqd{background:none;border:1px solid var(--gold);color:var(--gold);font-weight:800;padding:9px 14px;border-radius:10px;white-space:nowrap}
 .reveal b{font-size:17px}.reveal small{display:block;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:11px}
 .card0{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.chips button{padding:6px 10px;font-size:13px}
@@ -657,7 +665,7 @@ async function unbox() {
   rv.style.display = "flex"; rv.style.borderLeftColor = r.color;
   rv.innerHTML = "<div><small style=\\"color:" + r.color + "\\">" + r.label + " " + h(M.slots[won.slot] || won.slot) + "</small><b>" + h(won.name) + "</b>"
     + (d.reveal.dupe ? "<div>Already had it: +" + d.reveal.refund + " RUTS</div>" : "") + "</div>"
-    + (d.reveal.dupe ? "" : '<button data-i="' + won.id + '" data-s="' + won.slot + '">Equip</button>');
+    + (S.look[won.slot === "body" ? "body" : won.slot] === won.id ? '<button class="eqd" disabled>✓ Wearing it</button>' : '<button class="eq" data-i="' + won.id + '" data-s="' + won.slot + '">👕 Equip it</button>');
   busy = false; draw();
 }
 document.addEventListener("click", (e) => {
@@ -666,6 +674,7 @@ document.addEventListener("click", (e) => {
   else if (t.dataset.b) call("body", { type: t.dataset.b });
   else if (t.dataset.skin) call("skin", { tone: t.dataset.skin });
   else if (t.dataset.f) { filter = t.dataset.f; draw(); }
+  else if (t.classList.contains("eq")) { t.disabled = true; call("equip", { item: t.dataset.i }).then((d) => { t.outerHTML = d.error ? '<button class="eq" data-i="' + t.dataset.i + '">Try again</button>' : '<button class="eqd" disabled>✓ Wearing it</button>'; }); }
   else if (t.dataset.i) t.classList.contains("on") ? call("unequip", { slot: t.dataset.s }) : call("equip", { item: t.dataset.i });
 });
 // Two random rams from the herd hit the showers in the back.
@@ -812,6 +821,8 @@ nav button{background:none;border:0;color:#c9d3ea;font:inherit;font-weight:600;p
 nav button.on{background:var(--bg);color:var(--gold)}
 nav .navlink{color:#c9d3ea;font-weight:600;padding:10px 16px;text-decoration:none;border-radius:10px 10px 0 0}nav .navlink:hover{color:var(--gold)}
 main{padding:20px 16px 48px}
+.wksel{display:flex;align-items:center;gap:10px;margin:0 0 14px}.wksel label{color:var(--muted);font-weight:700}
+.wksel select{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:inherit;font-weight:700}
 .note{color:var(--muted);margin:0 0 16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
 .game{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;position:relative}
@@ -945,14 +956,14 @@ ${FIELD_CSS}
 <header><div class="wrap">
 <h1>RAMS <span>PICK'EM</span></h1>
 <div class="sub" id="sub">Loading...</div>
-<nav><button data-t="week" class="on">This Week</button><button data-t="last">Last Week</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><button data-t="bingo">Bingo</button><a class="navlink" href="/locker">Locker Room</a></nav>
+<nav><button data-t="week" class="on">Pick'em</button><button data-t="table">Standings</button><button data-t="bets">Bets &amp; Fights</button><button data-t="herd">Herd</button><button data-t="bingo">Bingo</button><a class="navlink" href="/locker">Locker Room</a></nav>
 </div></header>
 <template id="fieldtpl">${FIELD}</template>
 <main><div class="wrap" id="view"><div class="empty">Loading picks...</div></div></main>
 <script>
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const view = document.getElementById("view"), sub = document.getElementById("sub");
-let week = null, hist = null, herd = null, bets = null, fights = [], tab = "week", raf = 0;
+let pickWeek = "now", week = null, hist = null, herd = null, bets = null, fights = [], tab = "week", raf = 0;
 const when = (iso) => new Date(iso).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"});
 
 function faces(users) {
@@ -1486,24 +1497,33 @@ function bingoView() {
 function render() {
   cancelAnimationFrame(raf);
   if (tab !== "herd") herdHandler = null;
-  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.t === (tab === "last" ? "week" : tab)));
   { const on = document.querySelector("nav button.on"); if (on) on.parentNode.scrollLeft = Math.max(0, on.offsetLeft - 40); }
   if (tab === "herd") { pasture(); if (!live) pollLive(); return; }
   if (tab === "bets") { betsView(); return; }
   if (tab === "bingo") { bingoView(); return; }
-  if (tab === "week") {
-    if (!week) return;
-    if (week.error) { view.innerHTML = '<div class="empty">Couldn\\'t load this week: ' + esc(week.error) + '</div>'; return; }
-    sub.textContent = (week.label || "This week") + " · live picks from Discord";
-    view.innerHTML = week.games.length
-      ? '<p class="note">Hover a face to see who picked it. Updates every couple of minutes.</p><div class="grid">'
-        + week.games.map((g) => card(g)).join("") + '</div>'
-      : '<div class="empty">New polls go up Tuesday at 6 AM. Check Last Week and Standings in the meantime.</div>';
-  } else if (tab === "last") {
-    if (!hist) return;
-    sub.textContent = (hist.label || "No graded weeks yet") + " · results";
-    view.innerHTML = hist.games.length ? '<div class="grid">' + hist.games.map((g) => card(g, g.winner)).join("") + '</div>'
-      : '<div class="empty">Nothing graded yet.</div>';
+  if (tab === "week" || tab === "last") {
+    // Pick'em: this week's live polls, or any graded week from the selector
+    if (!week && !hist) return;
+    const past = ((hist && hist.weeks) || []).slice().reverse().filter((w) => !week || w.label !== week.label);
+    if (tab === "last" && pickWeek === "now" && past[0]) pickWeek = past[0].label;
+    const opts = '<option value="now"' + (pickWeek === "now" ? " selected" : "") + '>This week' + (week && week.label ? " · " + esc(week.label) : "") + '</option>'
+      + past.map((w) => '<option value="' + esc(w.label) + '"' + (pickWeek === w.label ? " selected" : "") + '>' + esc(w.label) + ' · results</option>').join("");
+    const sel = '<div class="wksel"><label for="wk">Week</label><select id="wk">' + opts + '</select></div>';
+    let body;
+    if (pickWeek === "now") {
+      sub.textContent = ((week && week.label) || "This week") + " · live picks from Discord";
+      body = !week ? '<div class="empty">Loading picks...</div>'
+        : week.error ? '<div class="empty">Couldn\\'t load this week: ' + esc(week.error) + '</div>'
+        : week.games.length ? '<p class="note">Hover a face to see who picked it. Updates every couple of minutes.</p><div class="grid">' + week.games.map((g) => card(g)).join("") + '</div>'
+        : '<div class="empty">New polls go up Tuesday at 6 AM. Pick a past week above in the meantime.</div>';
+    } else {
+      const w = past.find((x) => x.label === pickWeek) || { label: pickWeek, games: [] };
+      sub.textContent = w.label + " · results";
+      body = w.games.length ? '<div class="grid">' + w.games.map((g) => card(g, g.winner)).join("") + '</div>' : '<div class="empty">Nothing graded for this week.</div>';
+    }
+    view.innerHTML = sel + body;
+    document.getElementById("wk").onchange = (e) => { pickWeek = e.target.value; tab = "week"; render(); };
   } else {
     if (!hist) return;
     sub.textContent = (hist.season || "") + " season standings";
@@ -1522,7 +1542,7 @@ document.querySelectorAll("nav button").forEach((b) => b.onclick = () => { tab =
 if (["week", "last", "table", "herd", "bets", "bingo"].includes(location.hash.slice(1))) tab = location.hash.slice(1);
 fetch("/api/week").then((r) => r.json()).then((d) => { week = d; if (tab === "week") render(); }).catch((e) => { week = {error: e.message}; render(); });
 render();
-fetch("/api/history").then((r) => r.json()).then((d) => { hist = d; if (tab === "last" || tab === "table") render(); }).catch(() => {});
+fetch("/api/history").then((r) => r.json()).then((d) => { hist = d; if (tab === "week" || tab === "last" || tab === "table") render(); }).catch(() => {});
 connect();
 fetch("/api/bets").then((r) => r.json()).then((d) => { bets = d.bets; fights = d.fights || []; if (tab === "bets") render(); }).catch(() => { bets = []; });
 fetch("/api/herd").then((r) => r.json()).then((d) => { herd = d; if (tab === "herd") render(); }).catch(() => { herd = { rams: [] }; });
