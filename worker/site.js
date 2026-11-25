@@ -1127,7 +1127,7 @@ function pasture() {
           s.tx = rnd(14, 86); s.ty = rnd(24, 96); s.speed = !calm && Math.random() < .15 ? rnd(6, 8) : rnd(2.5, 4);
         } else { const v = Math.min(1, s.speed * dt / d); s.x += dx * v; s.y += dy * v; s.t += dt * (4 + s.speed * 0.8); moving = true; }
       }
-      const k = 0.6 + (s.y - 24) / 72 * 0.5;
+      const k = 0.62;   // flat field: every ram the same size wherever it stands
       s.el.style.left = s.x + "%"; s.el.style.top = s.y + "%";
       const hop = !moving || calm ? 0 : -Math.abs(Math.sin(s.t)) * 6;   // trotting bounce while moving
       s.el.style.transform = "translateY(" + hop.toFixed(1) + "px) scale(" + k.toFixed(3) + ")"; s.el.style.transformOrigin = "50% 100%";
