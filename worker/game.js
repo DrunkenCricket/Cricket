@@ -824,10 +824,12 @@ export class Game extends DurableObject {
     const set = new Set(Object.keys(hits));
     const board = this.all("SELECT user_id, name, card FROM bingo WHERE event_id=?", key).map((r) => {
       const c = JSON.parse(r.card);
-      return { id: r.user_id, name: shown(r.name), marked: c.filter((x) => x !== "free" && set.has(x)).length, bingos: bingos(c, set), paid: !!this.one("SELECT 1 AS x FROM ledger WHERE key=?", `bingo:${key}:${r.user_id}`) };
+      return { id: r.user_id, name: shown(r.name), card: c, marked: c.filter((x) => x !== "free" && set.has(x)).length, bingos: bingos(c, set), paid: !!this.one("SELECT 1 AS x FROM ledger WHERE key=?", `bingo:${key}:${r.user_id}`) };
     }).sort((a, b) => b.bingos - a.bingos || b.marked - a.marked);
     const labels = Object.fromEntries(pool.map((s) => [s.id, s.label]));
+    const used = new Set(board.flatMap((b) => b.card));   // labels for every card on the board, so anyone's card can be shown
     return { kind, game: g, lockAt, locked, crates: BINGO_CRATES, blackout: BLACKOUT_CRATES, state: this.meta("bingoState:" + key) || "pre", pool: pool.length, hits,
+      labels: Object.fromEntries([...used].filter((id) => labels[id]).map((id) => [id, labels[id]])),
       card: row ? JSON.parse(row.card).map((id) => ({ id, label: id === "free" ? "FREE" : labels[id] || id, team: (String(labels[id] || "").match(/\(([A-Z]{2,3})\)$/) || [])[1] })) : null, rerolls: row?.rerolls || 0, board };
   }
   /** First bingo and a blackout on each card pay out once. */

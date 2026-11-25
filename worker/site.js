@@ -867,7 +867,8 @@ h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacin
 .bgstat b{font-size:34px;font-weight:900}.bgstat b small{font-size:16px;color:var(--dim)}.bgstat span{color:var(--dim);font-weight:700}
 .bgstat.gold{border-color:#ffc82c;background:#2a2410}.bgstat.gold b,.bgstat.gold span{color:#ffc82c}
 .bgroll{background:#ffc82c;color:#15172b;border:0;border-radius:12px;padding:12px 16px;font-weight:900;font-size:16px;cursor:pointer}.bgroll:disabled{opacity:.5}
-tr.mine td{background:#2a2410}
+tr.mine td{background:#2a2410}tr.pk{cursor:pointer}tr.pk:hover td{background:#1c2650}tr.peeking td{background:#24305f}
+.bgpeek{display:flex;align-items:center;gap:12px;margin:0 0 10px;font-size:16px}.bgpeek button{background:#ffc82c;color:#15172b;border:0;border-radius:10px;padding:7px 12px;font-weight:800;cursor:pointer}
 @media (max-width:560px){.bggrid{gap:4px}.bgsq{padding:2px;border-radius:7px}.bgcard{padding:6px}}
 .lvbug{margin:0 0 10px}.lvbug:empty{display:none}
 .lvbug{display:flex;justify-content:center;padding:26px 8px 12px;margin:0 0 10px;border-radius:14px;background:linear-gradient(180deg,transparent,#0008 40%,#000c)}
@@ -1413,7 +1414,7 @@ function betsView() {
 
 // ---------- Rams Bingo ----------
 // two cards: the Rams game, and props-only from the rest of the NFL that week
-let bingoKind = "rams", bingo = null, bingoBusy = false;
+let bingoKind = "rams", bingo = null, bingoBusy = false, bingoPeek = null;
 const bingoCache = {};
 function loadBingo(op) {
   const key = myKey(), kind = bingoKind;
@@ -1428,7 +1429,7 @@ function bingoView() {
   const nfl = bingoKind === "nfl";
   sub.textContent = nfl ? "Rest of NFL Bingo" : "Rams Bingo";
   const tabs = '<div class="bgtabs"><button data-k="rams" class="' + (nfl ? "" : "on") + '">🐏 Rams card</button><button data-k="nfl" class="' + (nfl ? "on" : "") + '">🏈 Rest of NFL card</button></div>';
-  const wire = () => view.querySelectorAll("[data-k]").forEach((b) => b.onclick = () => { bingoKind = b.dataset.k; bingo = bingoCache[bingoKind] || null; bingoView(); });
+  const wire = () => view.querySelectorAll("[data-k]").forEach((b) => b.onclick = () => { bingoKind = b.dataset.k; bingoPeek = null; bingo = bingoCache[bingoKind] || null; bingoView(); });
   if (!bingo) {
     view.innerHTML = tabs + '<div class="empty">Shuffling cards...</div>'; wire(); loadBingo();
     // deal the other card too, so everyone with a key holds both
@@ -1437,11 +1438,18 @@ function bingoView() {
     return;
   }
   if (bingo.error) { view.innerHTML = tabs + '<div class="empty">' + esc(bingo.error) + '</div>'; wire(); return; }
-  const B = bingo, g = B.game, hits = B.hits || {};
+  let B = bingo; const g = B.game, hits = B.hits || {};
   const kick = new Date(B.lockAt || g.kick), when = kick.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   sub.textContent = nfl ? "Rest of NFL Bingo · prop bets from every other game this week" : "Rams Bingo · " + g.name;
   let html = tabs;
-  if (B.card) {
+  // tapping someone in "Cards in play" shows their card in place of yours
+  const peek = bingoPeek && (B.board || []).find((r) => r.id === bingoPeek);
+  const teamOf = (label) => (String(label || "").match(/[(]([A-Z]{2,3})[)]$/) || [])[1];
+  const cardOf = (ids) => ids.map((id) => { const label = id === "free" ? "FREE" : (B.labels || {})[id] || id; return { id, label, team: teamOf(label) }; });
+  if (peek) html += '<div class="bgpeek"><b>👀 ' + esc(peek.name) + "'s card</b>" + (peek.id === B.me ? "" : '<button id="bgback">Back to my card</button>') + '</div>';
+  const shownCard = peek ? cardOf(peek.card) : B.card;
+  if (shownCard) {
+    B = Object.assign({}, B, { card: shownCard });
     const on = (i) => B.card[i].id === "free" || !!hits[B.card[i].id];
     const win = new Set(); let n = 0;
     BLINES.forEach((l) => { if (l.every(on)) { n++; l.forEach((i) => win.add(i)); } });
@@ -1457,7 +1465,7 @@ function bingoView() {
       + '<div class="bgstat"><b>' + marked + '<small>/24</small></b><span>marked</span></div><div class="bgstat' + (n ? " gold" : "") + '"><b>' + n + '</b><span>' + (n === 1 ? "BINGO!" : n ? "BINGOS!" : "bingos") + '</span></div>'
       + '<div class="bgstat' + (n ? " gold" : "") + '"><b>\u{1F381}</b><span>' + (marked === 24 ? "BLACKOUT! " + (B.blackout || 10) + " crates are yours" : n ? (B.crates || 5) + " crates are yours. A blackout makes it " + (B.blackout || 10) : "Any bingo pays " + (B.crates || 5) + " crates. A blackout pays " + (B.blackout || 10)) + '</span></div>'
       + (clash.length ? '<p class="note">⚠️ ' + esc(clash.join(", ")) + ' both on this card, so a blackout is off the table. Still for fun.</p>' : "")
-      + (B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live ' + (nfl ? "games" : "game") + ' every minute.</p>'
+      + (peek && peek.id !== B.me ? "" : B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live ' + (nfl ? "games" : "game") + ' every minute.</p>'
         : '<button class="bgroll" id="bgroll"' + (bingoBusy ? " disabled" : "") + '>🎲 Re-roll my card</button><p class="note">Re-roll as often as you want until ' + (nfl ? "the first of these games kicks off" : "kickoff") + ' (' + esc(when) + '). Then it locks.</p>')
       + '<p class="note">This card runs for the game week, until Tuesday 6 AM.</p>'
       + '</div></div>';
@@ -1465,10 +1473,12 @@ function bingoView() {
     html += '<div class="empty">' + (B.expired ? "Your key expired. " : "") + 'Type <b>/bingo</b> in Discord and open the link to get your card for ' + esc(g.name) + '.</div>';
   }
   const board = B.board || [];
-  html += '<h3 class="past">Cards in play (' + board.length + ')</h3>' + (board.length ? '<table><thead><tr><th>#</th><th>Player</th><th>Marked</th><th>Bingos</th></tr></thead><tbody>'
-    + board.map((r, i) => '<tr' + (r.id === B.me ? ' class="mine"' : "") + '><td class="n">' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td class="n">' + r.marked + '/24</td><td class="n">' + (r.bingos ? "\u{1F3B1} " + r.bingos + (r.paid ? " \u00b7 \u{1F381}" : ""): "0") + '</td></tr>').join("")
+  html += '<h3 class="past">Cards in play (' + board.length + ') · tap a name to see their card</h3>' + (board.length ? '<table><thead><tr><th>#</th><th>Player</th><th>Marked</th><th>Bingos</th></tr></thead><tbody>'
+    + board.map((r, i) => '<tr data-peek="' + esc(r.id) + '" class="pk' + (r.id === B.me ? " mine" : "") + (r.id === bingoPeek ? " peeking" : "") + '"><td class="n">' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td class="n">' + r.marked + '/24</td><td class="n">' + (r.bingos ? "\u{1F3B1} " + r.bingos + (r.paid ? " \u00b7 \u{1F381}" : ""): "0") + '</td></tr>').join("")
     + '</tbody></table>' : '<div class="empty">Nobody has a card yet.</div>');
   view.innerHTML = html; wire();
+  view.querySelectorAll("[data-peek]").forEach((tr) => tr.onclick = () => { bingoPeek = tr.dataset.peek === bingoPeek ? null : tr.dataset.peek; bingoView(); scrollTo({ top: 0, behavior: "smooth" }); });
+  const bk = document.getElementById("bgback"); if (bk) bk.onclick = () => { bingoPeek = null; bingoView(); };
   const rb = document.getElementById("bgroll");
   if (rb) rb.onclick = () => { rb.disabled = true; loadBingo("reroll"); };
 }
