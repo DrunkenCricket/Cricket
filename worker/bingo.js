@@ -201,7 +201,9 @@ const playerHit = (G, s) => s.stat === "any_td"
 /** Player squares hit in one game's box score (Rest of NFL cards). */
 export function playerHits(sum, squares) {
   const G = { players: sum.boxscore?.players || [] };
-  return { hits: squares.filter((s) => { try { return playerHit(G, s); } catch { return false; } }).map((s) => s.id), state: sum.header?.competitions?.[0]?.status?.type?.state };
+  const comp = sum.header?.competitions?.[0] || {}, state = comp.status?.type?.state;
+  const won = (abbr) => state === "post" && (comp.competitors || []).some((c) => c.team?.abbreviation === abbr && c.winner === true);
+  return { hits: squares.filter((s) => { try { return s.win ? won(s.win) : playerHit(G, s); } catch { return false; } }).map((s) => s.id), state };
 }
 /** Which pool square ids are hit right now. */
 export function hitsFor(sum, pool) {

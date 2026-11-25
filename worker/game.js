@@ -765,7 +765,7 @@ export class Game extends DurableObject {
   }
   // Rest of NFL card: prop squares only, every other game in the Rams' game week. Locks at the first of those kickoffs.
   async bingoPoolNfl(g) {
-    const key = "bingoPoolNfl:" + g.id, saved = this.meta(key);
+    const key = "bingoPoolNfl2:" + g.id, saved = this.meta(key);
     if (saved) return JSON.parse(saved);
     let pool = [], kick = null;
     try {
@@ -782,6 +782,9 @@ export class Game extends DurableObject {
           const team = players.find((p) => sq.player === p.player.first_name + " " + p.player.last_name)?.team;
           pool.push({ ...sq, label: sq.label + (team ? " (" + team + ")" : ""), event: ev.id, kick: ev.kick });
         }
+        // "X wins" for both teams (both on one card means no blackout is possible; that's fine, it's for fun)
+        for (const team of new Set(players.map((p) => p.team)))
+          pool.push({ id: `w:${team}:${ev.id}`, label: `${team} wins (${team})`, win: ESPN_TEAM[team] || team, event: ev.id, kick: ev.kick });
         kick = Math.min(kick ?? ev.kick, ev.kick);
       }
     } catch (e) { console.log("bingo nfl sleeper", e); }
@@ -858,7 +861,7 @@ export class Game extends DurableObject {
       }
     }
     // Rest of NFL card: one box score per game that has started and isn't final yet
-    const key = "nfl:" + g.id, saved = this.meta("bingoPoolNfl:" + g.id);
+    const key = "nfl:" + g.id, saved = this.meta("bingoPoolNfl2:" + g.id);
     if (!saved || !this.one("SELECT 1 AS x FROM bingo WHERE event_id=? LIMIT 1", key)) return;
     const { pool } = JSON.parse(saved), byEvent = {};
     for (const s of pool) (byEvent[s.event] ||= []).push(s);

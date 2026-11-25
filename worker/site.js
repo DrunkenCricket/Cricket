@@ -1446,6 +1446,9 @@ function bingoView() {
     const win = new Set(); let n = 0;
     BLINES.forEach((l) => { if (l.every(on)) { n++; l.forEach((i) => win.add(i)); } });
     const marked = B.card.filter((c, i) => i !== 12 && on(i)).length;
+    // both sides of one game on the card: one of them has to lose, so no blackout
+    const games = {}; B.card.forEach((c) => { const m = /^w:([A-Z]+):(.+)$/.exec(c.id); if (m) (games[m[2]] ||= []).push(m[1]); });
+    const clash = Object.values(games).filter((t) => t.length > 1).map((t) => t.join(" vs "));
     html += '<div class="bgwrap"><div class="bgcard"><div class="bghead">' + ["B", "I", "N", "G", "O"].map((c) => '<b>' + c + '</b>').join("") + '</div><div class="bggrid">'
       + B.card.map((c, i) => '<div class="bgsq' + (c.id === "free" ? " free" : "") + (on(i) ? " hit" : "") + (win.has(i) ? " win" : "") + '">'
         + (c.team ? '<img class="bglogo" alt="" src="https://a.espncdn.com/i/teamlogos/nfl/500/' + ({ WAS: "wsh" }[c.team] || c.team.toLowerCase()) + '.png">' : "")
@@ -1453,6 +1456,7 @@ function bingoView() {
       + '</div></div><div class="bgside">'
       + '<div class="bgstat"><b>' + marked + '<small>/24</small></b><span>marked</span></div><div class="bgstat' + (n ? " gold" : "") + '"><b>' + n + '</b><span>' + (n === 1 ? "BINGO!" : n ? "BINGOS!" : "bingos") + '</span></div>'
       + '<div class="bgstat' + (n ? " gold" : "") + '"><b>\u{1F381}</b><span>' + (marked === 24 ? "BLACKOUT! " + (B.blackout || 10) + " crates are yours" : n ? (B.crates || 5) + " crates are yours. A blackout makes it " + (B.blackout || 10) : "Any bingo pays " + (B.crates || 5) + " crates. A blackout pays " + (B.blackout || 10)) + '</span></div>'
+      + (clash.length ? '<p class="note">⚠️ ' + esc(clash.join(", ")) + ' both on this card, so a blackout is off the table. Still for fun.</p>' : "")
       + (B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live ' + (nfl ? "games" : "game") + ' every minute.</p>'
         : '<button class="bgroll" id="bgroll"' + (bingoBusy ? " disabled" : "") + '>🎲 Re-roll my card</button><p class="note">Re-roll as often as you want until ' + (nfl ? "the first of these games kicks off" : "kickoff") + ' (' + esc(when) + '). Then it locks.</p>')
       + '<p class="note">This card runs for the game week, until Tuesday 6 AM.</p>'
