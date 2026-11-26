@@ -335,6 +335,10 @@ export async function handleSite(request, env, ctx) {
         headers: { "Content-Type": "application/json", Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` }, body: JSON.stringify(propMessage(r.prop, r.count)) }).catch(() => {}));
     return json({ ok: true, count: r.count, points: r.user?.points }, 0);
   }
+  if (pathname === "/api/bingo/why" && env.GAME) {   // what the Rams card's squares see in the live feed (for checking marks)
+    const g = env.GAME.get(env.GAME.idFromName("main")), bg = await g.bingoGame();
+    return json(bg ? await g.bingoExplain(bg.id) : { error: "no game" }, 0);
+  }
   if (pathname === "/api/bingo" && env.GAME) {   // POST with a key: your card (+ re-roll); GET: the scoreboard only
     let body = {};
     if (request.method === "POST") { try { body = await request.json(); } catch {} }
@@ -892,7 +896,8 @@ h3.past{color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacin
 .bgsq span{font-weight:800;font-size:clamp(9px,1.6vw,13px);line-height:1.15;position:relative;z-index:1}
 .bgsq.free{background:#ffc82c}.bgsq.free span{font:900 clamp(14px,2.6vw,22px)/1 Archivo,system-ui,sans-serif;font-stretch:125%}
 .bgsq i{position:absolute;inset:10%;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffd95eee,#ffa300cc 60%,#e08a00aa);box-shadow:inset 0 -4px 8px #0003;animation:daub .35s ease-out}
-.bgsq.hit span{z-index:2;color:#15172b}.bgsq.win{outline:3px solid #ff5ec4;outline-offset:-3px}
+.bgsq.hit span{z-index:2;color:#15172b}.bgsq.chk i{opacity:.45;animation:chk 1.2s ease-in-out infinite}.bgsq.chk::after{content:"⏳";position:absolute;top:3px;right:4px;font-size:11px;z-index:3}
+@keyframes chk{50%{opacity:.75}}.bgsq.win{outline:3px solid #ff5ec4;outline-offset:-3px}
 @keyframes daub{from{transform:scale(1.6);opacity:0}to{transform:scale(1);opacity:1}}
 .bgside{flex:0 1 240px;display:grid;gap:10px}
 .bgstat{background:#0f1733;border:1px solid #23305e;border-radius:14px;padding:12px 16px;display:flex;align-items:baseline;gap:8px}
@@ -1508,21 +1513,24 @@ function bingoView() {
   if (shownCard) {
     B = Object.assign({}, B, { card: shownCard });
     const on = (i) => B.card[i].id === "free" || !!hits[B.card[i].id];
+    // a fresh mark is "checking" for 5 minutes; only checked marks count toward a bingo
+    const checking = (i) => B.card[i].id !== "free" && !!hits[B.card[i].id] && (B.now || Date.now()) - hits[B.card[i].id] < (B.confirmMs || 300000);
+    const sure = (i) => on(i) && !checking(i);
     const win = new Set(); let n = 0;
-    BLINES.forEach((l) => { if (l.every(on)) { n++; l.forEach((i) => win.add(i)); } });
+    BLINES.forEach((l) => { if (l.every(sure)) { n++; l.forEach((i) => win.add(i)); } });
     const marked = B.card.filter((c, i) => i !== 12 && on(i)).length;
     // both sides of one game on the card: one of them has to lose, so no blackout
     const games = {}; B.card.forEach((c) => { const m = /^w:([A-Z]+):(.+)$/.exec(c.id); if (m) (games[m[2]] ||= []).push(m[1]); });
     const clash = Object.values(games).filter((t) => t.length > 1).map((t) => t.join(" vs "));
     html += '<div class="bgwrap"><div class="bgcard"><div class="bghead">' + ["B", "I", "N", "G", "O"].map((c) => '<b>' + c + '</b>').join("") + '</div><div class="bggrid">'
-      + B.card.map((c, i) => '<div class="bgsq' + (c.id === "free" ? " free" : "") + (on(i) ? " hit" : "") + (win.has(i) ? " win" : "") + '">'
+      + B.card.map((c, i) => '<div class="bgsq' + (c.id === "free" ? " free" : "") + (on(i) ? " hit" : "") + (checking(i) ? " chk" : "") + (win.has(i) ? " win" : "") + '"' + (checking(i) ? ' title="Just marked. Double-checking for 5 minutes before it counts."' : "") + '>'
         + (c.team ? '<img class="bglogo" alt="" src="https://a.espncdn.com/i/teamlogos/nfl/500/' + ({ WAS: "wsh" }[c.team] || c.team.toLowerCase()) + '.png">' : "")
         + '<span>' + esc(c.team ? c.label.replace(/ [(][A-Z]{2,3}[)]$/, "") : c.label) + '</span>' + (on(i) && c.id !== "free" ? '<i></i>' : "") + '</div>').join("")
       + '</div></div><div class="bgside">'
       + '<div class="bgstat"><b>' + marked + '<small>/24</small></b><span>marked</span></div><div class="bgstat' + (n ? " gold" : "") + '"><b>' + n + '</b><span>' + (n === 1 ? "BINGO!" : n ? "BINGOS!" : "bingos") + '</span></div>'
       + '<div class="bgstat' + (n ? " gold" : "") + '"><b>\u{1F381}</b><span>' + (marked === 24 ? "BLACKOUT! " + (B.blackout || 10) + " crates are yours" : n ? (B.crates || 5) + " crates are yours. A blackout makes it " + (B.blackout || 10) : "Any bingo pays " + (B.crates || 5) + " crates. A blackout pays " + (B.blackout || 10)) + '</span></div>'
       + (clash.length ? '<p class="note">⚠️ ' + esc(clash.join(", ")) + ' both on this card, so a blackout is off the table. Still for fun.</p>' : "")
-      + (peek && peek.id !== B.me ? "" : B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live ' + (nfl ? "games" : "game") + ' every minute.</p>'
+      + (peek && peek.id !== B.me ? "" : B.locked ? '<p class="note">🔒 Locked at kickoff. Squares mark themselves from the live ' + (nfl ? "games" : "game") + ' every minute. New marks show ⏳ for 5 minutes while they get double-checked, then they count.</p>'
         : '<button class="bgroll" id="bgroll"' + (bingoBusy ? " disabled" : "") + '>🎲 Re-roll my card</button><p class="note">Re-roll as often as you want until ' + (nfl ? "the first of these games kicks off" : "kickoff") + ' (' + esc(when) + '). Then it locks.</p>')
       + '<p class="note">This card runs for the game week, until Tuesday 6 AM.</p>'
       + '</div></div>';

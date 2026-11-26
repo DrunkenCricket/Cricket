@@ -14,9 +14,14 @@ export function gameView(sum) {
   const oppC = (comp.competitors || []).find((c) => c.team?.id !== RAMS) || {};
   const ramsHome = ramsC.homeAway === "home";
   const teamStats = (id) => Object.fromEntries(((sum.boxscore?.teams || []).find((t) => t.team?.id === id)?.statistics || []).map((s) => [s.name, s.displayValue]));
-  const drives = [...(sum.drives?.previous || []), ...(sum.drives?.current ? [sum.drives.current] : [])];
+  // ESPN repeats the live drive in both "previous" and "current", and can repeat plays: count each drive and play once
+  const seenD = new Set(), seenP = new Set();
+  const drives = [...(sum.drives?.previous || []), ...(sum.drives?.current ? [sum.drives.current] : [])].filter((d) => { if (!d.id) return true; if (seenD.has(d.id)) return false; seenD.add(d.id); return true; });
   const plays = [];
   for (const d of drives) for (const p of d.plays || []) {
+    if (p.id && seenP.has(p.id)) continue;
+    if (p.id) seenP.add(p.id);
+    if (/no play|nullified/i.test(p.text || "") && !/penalty/i.test(p.type?.text || "")) continue;   // wiped out by a flag
     const off = p.start?.team?.id || d.team?.id;
     plays.push({ type: (p.type?.text || "").toLowerCase(), text: p.text || "", off, rams: off === RAMS, yds: p.statYardage ?? 0,
       q: p.period?.number || 0, left: secs(p.clock?.displayValue), scoring: !!p.scoringPlay, turnover: !!p.isTurnover,
@@ -205,6 +210,16 @@ export function playerHits(sum, squares) {
   const won = (abbr) => state === "post" && (comp.competitors || []).some((c) => c.team?.abbreviation === abbr && c.winner === true);
   return { hits: squares.filter((s) => { try { return s.win ? won(s.win) : playerHit(G, s); } catch { return false; } }).map((s) => s.id), state };
 }
+/** Debug view of what the squares saw: scores, touchdowns, kicks, flags. */
+export function explain(sum) {
+  const G = gameView(sum);
+  const pick = (f) => G.plays.filter(f).map((p) => ({ q: p.q, left: p.left, rams: p.rams, type: p.type, text: p.text.slice(0, 160), r: p.r, o: p.o }));
+  return { state: G.state, period: G.period, rs: G.rs, os: G.os, drives: G.drives.length, plays: G.plays.length,
+    scoring: scores(G).map((x) => ({ q: x.q, left: x.left, rams: x.rams, type: x.type, dr: x.dr, dO: x.dO, text: x.text.slice(0, 120) })),
+    tds: pick((p) => /touchdown/.test(p.type)), fgs: pick((p) => /field goal/.test(p.type)), flags: pick((p) => /penalty/i.test(p.text)).slice(-20),
+    rams: G.rams, opp: G.oppS };
+}
+
 /** Which pool square ids are hit right now. */
 export function hitsFor(sum, pool) {
   const G = gameView(sum), out = [];

@@ -13,7 +13,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { ITEMS, RARITY, FIRST_CRATE, SLOTS, SLOT_NAMES, BODY_TYPES } from "./ram.js";
 import { lockerUser } from "./auth.js";
-import { COMMON, propSquares, hitsFor, playerHits, bingos } from "./bingo.js";
+import { COMMON, propSquares, hitsFor, playerHits, bingos, explain } from "./bingo.js";
+export const CONFIRM_MS = 5 * 60_000;   // a mark counts toward bingos once it has held up for 5 minutes
 export const BINGO_CRATES = 5, BLACKOUT_CRATES = 10;   // a blackout (every square) is 10 crates total, not 10 on top
 
 export const PICK_POINTS = 10, VOTE_POINTS = 5, CRATE_COST = 60, PROP_COST = 20, FIGHT_STAKE = 50, MAX_UNITS = 10;
@@ -824,20 +825,20 @@ export class Game extends DurableObject {
       row = this.one("SELECT * FROM bingo WHERE user_id=? AND event_id=?", uid, key);
     }
     const hits = JSON.parse(this.meta("bingoHits:" + key) || "{}");
-    const set = new Set(Object.keys(hits));
+    const set = this.confirmedHits(key);
     const board = this.all("SELECT user_id, name, card FROM bingo WHERE event_id=?", key).map((r) => {
       const c = JSON.parse(r.card);
       return { id: r.user_id, name: shown(r.name), card: c, marked: c.filter((x) => x !== "free" && set.has(x)).length, bingos: bingos(c, set), paid: !!this.one("SELECT 1 AS x FROM ledger WHERE key=?", `bingo:${key}:${r.user_id}`) };
     }).sort((a, b) => b.bingos - a.bingos || b.marked - a.marked);
     const labels = Object.fromEntries(pool.map((s) => [s.id, s.label]));
     const used = new Set(board.flatMap((b) => b.card));   // labels for every card on the board, so anyone's card can be shown
-    return { kind, game: g, lockAt, locked, crates: BINGO_CRATES, blackout: BLACKOUT_CRATES, state: this.meta("bingoState:" + key) || "pre", pool: pool.length, hits,
+    return { kind, game: g, lockAt, locked, confirmMs: CONFIRM_MS, now: Date.now(), crates: BINGO_CRATES, blackout: BLACKOUT_CRATES, state: this.meta("bingoState:" + key) || "pre", pool: pool.length, hits,
       labels: Object.fromEntries([...used].filter((id) => labels[id]).map((id) => [id, labels[id]])),
       card: row ? JSON.parse(row.card).map((id) => ({ id, label: id === "free" ? "FREE" : labels[id] || id, team: (String(labels[id] || "").match(/\(([A-Z]{2,3})\)$/) || [])[1] })) : null, rerolls: row?.rerolls || 0, board };
   }
   /** First bingo and a blackout on each card pay out once. */
   payBingos(key, name) {
-    const set = new Set(Object.keys(JSON.parse(this.meta("bingoHits:" + key) || "{}")));
+    const set = this.confirmedHits(key);   // only marks that have held up for 5 minutes pay
     for (const r of this.all("SELECT user_id, card FROM bingo WHERE event_id=?", key)) {
       const card = JSON.parse(r.card);
       if (bingos(card, set) && this.pay(`bingo:${key}:${r.user_id}`, r.user_id, 0, `Bingo! ${name} - ${BINGO_CRATES} crates`))
@@ -846,10 +847,27 @@ export class Game extends DurableObject {
         this.sql.exec("UPDATE users SET crates = crates + ? WHERE id=?", BLACKOUT_CRATES - BINGO_CRATES, r.user_id);   // tops the bingo's 5 up to 10
     }
   }
-  markHits(key, ids) {
-    const old = JSON.parse(this.meta("bingoHits:" + key) || "{}");
-    for (const id of ids) old[id] ??= Date.now();
+  /**
+   * Every check recomputes from the full game feed. A square that is no longer true (a double-counted play,
+   * a reversed call) loses its mark. Marks only count toward bingos and payouts after CONFIRM_MS of staying true.
+   * scope: the square ids this feed is allowed to judge (other games' squares on the NFL card are left alone).
+   */
+  markHits(key, ids, scope) {
+    const old = JSON.parse(this.meta("bingoHits:" + key) || "{}"), now = Date.now(), on = new Set(ids);
+    const removed = [];
+    for (const id of Object.keys(old)) if ((!scope || scope.has(id)) && !on.has(id) && !this.meta("bingoLocked:" + key + ":" + id)) { delete old[id]; removed.push(id); }
+    for (const id of ids) old[id] ??= now;
+    for (const [id, ts] of Object.entries(old)) if (now - ts >= CONFIRM_MS) this.meta("bingoLocked:" + key + ":" + id, ts);   // confirmed: stays marked
+    if (removed.length) console.log("bingo unmarked", key, removed.join(","));
     this.meta("bingoHits:" + key, JSON.stringify(old));
+  }
+  confirmedHits(key) {
+    const now = Date.now();
+    return new Set(Object.entries(JSON.parse(this.meta("bingoHits:" + key) || "{}")).filter(([, ts]) => now - ts >= CONFIRM_MS).map(([id]) => id));
+  }
+  async bingoExplain(eventId) {
+    const res = await fetch(`${ESPN}/summary?event=${eventId}`, { cf: { cacheTtl: 15 } });
+    return explain(await res.json());
   }
   /** Mark squares from live games. Runs every minute; each game is checked from kickoff until it's final. */
   async bingoUpdate() {
@@ -860,7 +878,7 @@ export class Game extends DurableObject {
       const res = await fetch(`${ESPN}/summary?event=${g.id}`, { cf: { cacheTtl: 30 } });
       if (res.ok) {
         const { hits, state } = hitsFor(await res.json(), await this.bingoPool(g));
-        this.markHits(g.id, hits);
+        this.markHits(g.id, hits, new Set((await this.bingoPool(g)).map((s) => s.id)));
         if (state) this.meta("bingoState:" + g.id, state);
         this.payBingos(g.id, g.name);
       }
@@ -876,7 +894,7 @@ export class Game extends DurableObject {
       const res = await fetch(`${ESPN}/summary?event=${ev}`, { cf: { cacheTtl: 30 } });
       if (!res.ok) continue;
       const { hits, state } = playerHits(await res.json(), squares);
-      this.markHits(key, hits); changed = true;
+      this.markHits(key, hits, new Set(squares.map((s) => s.id))); changed = true;
       if (state) this.meta("bingoState:" + ev, state);
     }
     if (changed) this.payBingos(key, "Rest of NFL bingo");
