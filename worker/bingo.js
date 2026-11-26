@@ -216,7 +216,7 @@ export function explain(sum) {
   const pick = (f) => G.plays.filter(f).map((p) => ({ q: p.q, left: p.left, rams: p.rams, type: p.type, text: p.text.slice(0, 160), r: p.r, o: p.o }));
   return { state: G.state, period: G.period, rs: G.rs, os: G.os, drives: G.drives.length, plays: G.plays.length,
     scoring: scores(G).map((x) => ({ q: x.q, left: x.left, rams: x.rams, type: x.type, dr: x.dr, dO: x.dO, text: x.text.slice(0, 120) })),
-    tds: pick((p) => /touchdown/.test(p.type)), fgs: pick((p) => /field goal/.test(p.type)), flags: pick((p) => /penalty/i.test(p.text)).slice(-20),
+    tds: pick((p) => /touchdown/.test(p.type)), turnovers: pick((p) => /fumble|intercept/i.test(p.text) || /fumble|interception/.test(p.type)), drivesList: G.drives.map((d) => (d.team === RAMS ? "LAR" : "OPP") + " " + d.result + " " + d.plays), fgs: pick((p) => /field goal/.test(p.type)), flags: pick((p) => /penalty/i.test(p.text)).slice(-20),
     rams: G.rams, opp: G.oppS };
 }
 
