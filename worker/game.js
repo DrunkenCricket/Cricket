@@ -921,6 +921,11 @@ export class Game extends DurableObject {
       users: this.all("SELECT e.user_id AS id, u.name, COALESCE(e.side,'yes') AS side, COALESCE(e.units,1) AS units FROM entries e LEFT JOIN users u ON u.id = e.user_id WHERE e.prop_id=? ORDER BY e.ts", p.id) }));
   }
   herd() { return this.all("SELECT id, name, points FROM users"); }
+  /** Recent crate payouts (bet wins, bingos) with names, for checking that winners got paid. */
+  payouts() {
+    return this.all("SELECT l.key, l.reason, l.ts, u.name, u.crates FROM ledger l LEFT JOIN users u ON u.id = l.user_id WHERE l.key LIKE 'propwin:%' OR l.key LIKE 'bingo:%' OR l.key LIKE 'blackout:%' OR l.key LIKE 'refund:%' ORDER BY l.ts DESC LIMIT 80")
+      .map((r) => ({ ...r, name: shown(r.name) }));
+  }
   leaders() { return this.all("SELECT id, name, points FROM users ORDER BY points DESC LIMIT 10"); }
   inventory(uid) {
     return this.all("SELECT item_id FROM items WHERE user_id=? ORDER BY ts", uid).map((r) => pub(ITEMS[r.item_id])).filter(Boolean);

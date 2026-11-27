@@ -335,6 +335,7 @@ export async function handleSite(request, env, ctx) {
         headers: { "Content-Type": "application/json", Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` }, body: JSON.stringify(propMessage(r.prop, r.count)) }).catch(() => {}));
     return json({ ok: true, count: r.count, points: r.user?.points }, 0);
   }
+  if (pathname === "/api/payouts" && env.GAME) return json(await env.GAME.get(env.GAME.idFromName("main")).payouts(), 0);
   if (pathname === "/api/bingo/why" && env.GAME) {   // what the Rams card's squares see in the live feed (for checking marks)
     const g = env.GAME.get(env.GAME.idFromName("main")), bg = await g.bingoGame();
     return json(bg ? await g.bingoExplain(bg.id) : { error: "no game" }, 0);
